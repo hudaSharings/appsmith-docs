@@ -1,0 +1,1179 @@
+Issue Type,Epic Name,Epic Link,Summary,Description,Story Points,Priority,Components,Labels
+Epic,PLAT - Platform & Foundation,,Platform & Foundation,"Shared building blocks, CI/CD, local dev environment and the gateway walking skeleton. Every other epic depends on this one shipping first.",,,Platform,Phase-A
+Story,,PLAT - Platform & Foundation,Implement BuildingBlocks.Abstractions,"As a platform engineer, I want a shared library of IClock, IUserContext and Result<T>, so that every service uses the same core primitives instead of inventing its own.
+
+Acceptance Criteria:
+- IClock and TimeProvider wired for testability
+- IUserContext contract defined (userId, instanceId, roleIds, correlationId)
+- Result<T> pattern documented with usage examples
+- Published as a versioned NuGet package to the internal feed",3,High,Platform,"shared-buildingblocks-libraries,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement BuildingBlocks.Observability,"As a platform engineer, I want OpenTelemetry wired for ASP.NET Core, HttpClient, Npgsql, gRPC and MassTransit, so that every service emits consistent traces, metrics and structured logs out of the box.
+
+Acceptance Criteria:
+- OTLP exporter configured via IConfiguration
+- Correlation id propagated through HTTP headers, gRPC metadata and broker message headers
+- Serilog structured logging to stdout with resource attributes (service.name/version/instance)
+- /health/live and /health/ready helpers included",5,High,Platform,"shared-buildingblocks-libraries,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement BuildingBlocks.Messaging,"As a platform engineer, I want a MassTransit + RabbitMQ package with outbox and inbox conventions baked in, so that no service has to hand-roll idempotent, transactionally-safe event publishing.
+
+Acceptance Criteria:
+- AddEntityFrameworkOutbox extension method with sane defaults
+- Inbox table + idempotent-consumer base class
+- Retry + delayed-redelivery policy preset
+- Sample producer and consumer used in an integration test",8,High,Platform,"shared-buildingblocks-libraries,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement BuildingBlocks.Auth,"As a platform engineer, I want middleware that validates the internal JWT and populates IUserContext, so that services never read HttpContext directly for identity.
+
+Acceptance Criteria:
+- JWT signature validated against the shared JWKS
+- IUserContext populated from claims (userId, instanceId, roleIds, correlationId)
+- Middleware registered with one extension method
+- Unit tests cover expired, malformed and valid tokens",5,High,Platform,"shared-buildingblocks-libraries,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement BuildingBlocks.Persistence,"As a platform engineer, I want EF Core conventions for soft delete and audit columns, so that every service gets deletedAt filtering and created/updated stamping for free.
+
+Acceptance Criteria:
+- Global query filter applied via one extension method
+- SaveChanges interceptor stamps created_at/updated_at/created_by/updated_by
+- Delete() converts to a deletedAt write, never a real DELETE, on annotated entities
+- Verified against a sample DbContext in an integration test",5,High,Platform,"shared-buildingblocks-libraries,Phase-A"
+Story,,PLAT - Platform & Foundation,Port the permission cascade graph as a pure function,"As a platform engineer, I want the hierarchy and lateral permission graphs ported from PolicyGeneratorCE as pure C# functions, so that every service that needs authz_grants derivation uses one tested implementation, never a fork.
+
+Acceptance Criteria:
+- CascadeToChild(parent, child, permission) implemented and unit tested against the Java enum values
+- Implied(permission) implemented for same-resource lateral grants
+- Zero I/O — fully unit-testable, no database or HTTP
+- Test suite ports the equivalent cases from PolicyGeneratorCE",8,High,Platform,"shared-buildingblocks-libraries,Phase-A"
+Story,,PLAT - Platform & Foundation,Set up solution-wide build configuration,"As a platform engineer, I want Directory.Build.props and Directory.Packages.props at the repo root, so that every project shares LangVersion, Nullable, TreatWarningsAsErrors and one package version each.
+
+Acceptance Criteria:
+- Nullable reference types enabled, warnings as errors
+- Central package management enforced — no per-project <PackageReference Version>
+- global.json pins the SDK version",2,High,Platform,"ci-cd-&-architecture-enforcement,Phase-A"
+Story,,PLAT - Platform & Foundation,Add architecture tests to the service template,"As a tech lead, I want a NetArchTest suite enforcing the Domain/Application/Infrastructure/Api layer rules, so that a layer violation fails the build instead of surviving code review.
+
+Acceptance Criteria:
+- Domain project may not reference EF Core, ASP.NET or MassTransit
+- Application project may not reference concrete Infrastructure types
+- Rules run as part of every service's unit test project
+- Template documented so new services start with the tests included",5,High,Platform,"ci-cd-&-architecture-enforcement,Phase-A"
+Story,,PLAT - Platform & Foundation,Build the CI pipeline,"As a platform engineer, I want a pipeline that builds, tests, checks formatting and builds container images for every service, so that every merge to main is verified the same way regardless of which service changed.
+
+Acceptance Criteria:
+- dotnet build / dotnet test / dotnet format --verify-no-changes all gate the merge
+- Container image built and pushed per service on merge
+- Pipeline runs in under a target wall-clock budget agreed with the team",8,High,Platform,"ci-cd-&-architecture-enforcement,Phase-A"
+Story,,PLAT - Platform & Foundation,Add .proto contract diff checking to CI,"As a tech lead, I want the pipeline to diff every service's .proto files against the previous release, so that a breaking contract change is caught before it reaches a consumer.
+
+Acceptance Criteria:
+- Diff tool flags removed fields, retyped fields and removed RPCs as breaking
+- Breaking changes fail the build unless the PR carries a contract-break label
+- Non-breaking additions pass silently",5,Medium,Platform,"ci-cd-&-architecture-enforcement,Phase-A"
+Story,,PLAT - Platform & Foundation,Add EF Core migrations as a deploy-time job,"As a platform engineer, I want a dedicated Kubernetes Job (or compose step) that applies pending migrations before a service starts, so that eight replicas never race to apply the same migration.
+
+Acceptance Criteria:
+- No service calls Database.Migrate() in Program.cs
+- Migration job runs to completion before the deployment rollout proceeds
+- Job failure blocks the deployment",3,High,Platform,"ci-cd-&-architecture-enforcement,Phase-A"
+Story,,PLAT - Platform & Foundation,Author the Aspire AppHost,"As a developer, I want one command that starts Postgres, Redis, RabbitMQ and every service locally, so that I don't need to hand-configure eight services and three pieces of infrastructure to start working.
+
+Acceptance Criteria:
+- dotnet run on the AppHost starts all configured resources
+- Six Postgres databases provisioned automatically
+- Aspire dashboard shows logs and traces across every service",5,High,Platform,"local-dev-environment-.net-aspire,Phase-A"
+Story,,PLAT - Platform & Foundation,"Wire service discovery for Identity, Application and Datasource","As a developer, I want the AppHost to inject connection strings and service URLs automatically, so that I never hand-edit an appsettings.json to point one service at another locally.
+
+Acceptance Criteria:
+- WithReference() wiring covers every declared sync dependency
+- Services resolve each other by Aspire-assigned names, not hardcoded ports
+- Works after a machine restart with no manual steps",5,Medium,Platform,"local-dev-environment-.net-aspire,Phase-A"
+Story,,PLAT - Platform & Foundation,Add the Angular app to the AppHost,"As a frontend developer, I want the Angular dev server to start alongside the backend via AddNpmApp, so that I get the whole stack running with one command during frontend work too.
+
+Acceptance Criteria:
+- ng serve launches through the AppHost
+- Angular app's API base URL points at the gateway automatically
+- Hot reload still works for both sides",3,Medium,Platform,"local-dev-environment-.net-aspire,Phase-A"
+Story,,PLAT - Platform & Foundation,Stand up YARP routing for all seven services,"As a platform engineer, I want a reverse-proxy routing table mapping /api/v1/* prefixes to their owning service, so that the gateway can route a request without any service knowing about any other.
+
+Acceptance Criteria:
+- Routes configured for Identity, Application, Datasource paths at minimum for the skeleton
+- Unmatched routes return a clean 404, not a proxy error
+- Routing table is data-driven, not hardcoded per route",5,High,Platform,"api-gateway-walking-skeleton,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement cookie session and CSRF,"As a security engineer, I want a __Host- prefixed HttpOnly session cookie plus double-submit CSRF, so that the Angular client's auth model matches what the current React client already does.
+
+Acceptance Criteria:
+- Session cookie is HttpOnly, Secure, SameSite=Lax
+- XSRF-TOKEN cookie set and validated via header on mutating requests
+- CSRF failure returns a clear 403 with no state change",5,High,Platform,"api-gateway-walking-skeleton,Phase-A"
+Story,,PLAT - Platform & Foundation,Wire session validation with a Redis cache,"As a platform engineer, I want the gateway to call Identity's ValidateSession over gRPC and cache the result in Redis, so that most requests don't pay a network hop for authentication.
+
+Acceptance Criteria:
+- Cache hit path skips the gRPC call entirely
+- Cache miss falls back to gRPC and re-populates the cache
+- TTL is short and configurable",5,High,Platform,"api-gateway-walking-skeleton,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement internal JWT minting,"As a platform engineer, I want the gateway to mint a short-lived signed JWT for every downstream call, so that services never see the browser's session cookie.
+
+Acceptance Criteria:
+- Token TTL is ~60 seconds and never persisted
+- Token carries userId, instanceId, roleIds and correlationId
+- Downstream services validate it against a shared JWKS",3,High,Platform,"api-gateway-walking-skeleton,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement the response envelope and authorization filter,"As a frontend developer, I want every gateway response wrapped in {responseMeta, data} and every authz failure returned as 404, so that the client's existing unwrap-and-error-handling logic needs no changes.
+
+Acceptance Criteria:
+- Envelope applied once as a filter, not per endpoint
+- Authorization failures return 404 with no existence leak, matching current behaviour
+- Envelope shape verified against a sample of current Java responses",3,High,Platform,"api-gateway-walking-skeleton,Phase-A"
+Story,,PLAT - Platform & Foundation,Implement gateway rate limiting,"As a platform engineer, I want token-bucket rate limits per user, per workspace and per endpoint, so that one bad client can't degrade the platform for everyone else.
+
+Acceptance Criteria:
+- Login and signup have tighter limits than general CRUD
+- Limit breach returns 429 with a Retry-After header
+- Limits are configurable without a redeploy",5,Medium,Platform,"api-gateway-walking-skeleton,Phase-A"
+Story,,PLAT - Platform & Foundation,Build the connector golden-file capture harness,"As a tech lead, I want tooling that records request/response pairs from each running Java plugin, so that every rewritten connector has an objective correctness bar before it ships.
+
+Acceptance Criteria:
+- Harness captures datasource config + action config in, ActionExecutionResult out
+- Captures error shapes, type coercion and pagination, not just the happy path
+- Output format is directly consumable as a .NET test fixture",8,Highest,Platform,"reference-material-capture,Phase-A"
+Story,,PLAT - Platform & Foundation,Export the application DSL corpus,"As a tech lead, I want a few hundred real page DSLs exported from the Java system as fixtures, so that the evaluation-engine port, visual regression and widget prioritisation all have real data to work from.
+
+Acceptance Criteria:
+- Corpus spans a representative range of widget usage, not just simple pages
+- Fixtures are anonymised of any customer-identifying content
+- Corpus is versioned and reusable across every phase that needs it",5,High,Platform,"reference-material-capture,Phase-A"
+Story,,PLAT - Platform & Foundation,Catalogue the Mongock changelogs,"As a tech lead, I want all 83 migration changelog classes read and summarised for migration-relevant behaviour, so that the schema and data-migration design don't silently drop a years-old data fix.
+
+Acceptance Criteria:
+- Each changelog's intent is summarised in one line
+- Changelogs with an equivalent needed in the new schema are flagged explicitly
+- Findings feed directly into the Data Migration epic",8,Medium,Platform,"reference-material-capture,Phase-A"
+Epic,IAM - Identity & Access Service,,Identity & Access Service,"Authenticate people and be the single source of truth for what they may do: users, workspaces, memberships, roles and permission grants.",,,Identity,Phase-A
+Story,,IAM - Identity & Access Service,Create the identity_db schema,"As a backend developer, I want EF Core migrations for instances, users, workspaces and their supporting tables, so that the service has a real database to build against.
+
+Acceptance Criteria:
+- Matches the DDL in Database per Service §5.1
+- Migrations run cleanly against a fresh Postgres instance
+- Soft-delete and audit conventions from BuildingBlocks.Persistence applied",5,High,Identity,"instance-&-tenancy-foundation,Phase-A"
+Story,,IAM - Identity & Access Service,Collapse Tenant and Organization into one Instance record,"As a backend developer, I want the domain model to represent instance-level config as a single row, so that the two-collection ambiguity in the current system doesn't carry into the new one.
+
+Acceptance Criteria:
+- One instances row per deployment, holding branding and enabled-auth-method config
+- No Tenant/Organization duplication anywhere in the schema
+- Migration mapping documented for the data-migration team",5,High,Identity,"instance-&-tenancy-foundation,Phase-A"
+Story,,IAM - Identity & Access Service,Implement instance configuration endpoints,"As an instance administrator, I want to read and update instance-level configuration, so that I can set branding and enabled login methods without touching the database directly.
+
+Acceptance Criteria:
+- GET returns the current configuration
+- PUT updates it and is restricted to instance admins
+- Response matches the current /tenants/current shape at the gateway",3,Medium,Identity,"instance-&-tenancy-foundation,Phase-A"
+Story,,IAM - Identity & Access Service,Implement signup,"As a new user, I want to sign up with an email and password, so that I get an account, a default workspace and admin access to it in one step.
+
+Acceptance Criteria:
+- Creates the user, a default workspace, three roles (Admin/Developer/Viewer) and the role assignment in one transaction
+- Duplicate email returns a clear validation error
+- UserSignedUp event published via the outbox",8,High,Identity,"user-registration-&-authentication,Phase-A"
+Story,,IAM - Identity & Access Service,Implement login,"As a registered user, I want to log in with my email and password, so that I get an authenticated session.
+
+Acceptance Criteria:
+- Password verified with Argon2id
+- Disabled or unverified accounts are rejected with a clear reason
+- Returns UserContext (userId, instanceId, roleIds) to the caller",5,High,Identity,"user-registration-&-authentication,Phase-A"
+Story,,IAM - Identity & Access Service,Implement first-user / instance-admin signup,"As the person deploying a fresh instance, I want the very first signup to automatically receive instance-admin rights, so that there's a bootstrapping path with no manual database edit.
+
+Acceptance Criteria:
+- Only applies when zero users exist on the instance
+- Grants MANAGE_INSTANCE_CONFIGURATION-equivalent rights
+- Subsequent signups follow the normal path",3,Medium,Identity,"user-registration-&-authentication,Phase-A"
+Story,,IAM - Identity & Access Service,Implement GET /users/me,"As the Angular client, I want an endpoint returning the current user's profile, so that the app shell can render the signed-in user without a second round trip after login.
+
+Acceptance Criteria:
+- Returns profile, workspace list summary and feature-flag-relevant fields
+- 401 when no valid session/token is present
+- Response shape matches the current contract",2,High,Identity,"user-registration-&-authentication,Phase-A"
+Story,,IAM - Identity & Access Service,Implement profile update,"As a user, I want to update my display name and photo, so that my profile reflects who I am.
+
+Acceptance Criteria:
+- Photo upload writes to object storage, not the database
+- Validation matches current field constraints
+- Update is reflected immediately in GET /users/me",3,Medium,Identity,"user-registration-&-authentication,Phase-A"
+Story,,IAM - Identity & Access Service,Implement forgot-password,"As a user who forgot their password, I want to request a reset link, so that I can regain access to my account.
+
+Acceptance Criteria:
+- Issues a short-lived token and publishes UserPasswordResetRequested
+- Response is identical whether or not the email exists, to avoid account enumeration
+- Token expiry matches the documented window",5,High,Identity,"password-reset-&-email-verification,Phase-A"
+Story,,IAM - Identity & Access Service,Implement reset-password,"As a user with a valid reset token, I want to set a new password, so that I can log in again.
+
+Acceptance Criteria:
+- Token is single-use and expires after the documented window
+- New password is hashed with Argon2id
+- Invalid or expired tokens return a clear, non-leaking error",3,High,Identity,"password-reset-&-email-verification,Phase-A"
+Story,,IAM - Identity & Access Service,Implement email verification,"As a newly signed-up user, I want to verify my email address via a link, so that the platform knows the address is real.
+
+Acceptance Criteria:
+- Verification token issuance publishes UserEmailVerificationRequested
+- Verify endpoint marks the account verified and is idempotent on re-click
+- Resend-verification endpoint respects a rate limit",3,Medium,Identity,"password-reset-&-email-verification,Phase-A"
+Story,,IAM - Identity & Access Service,Implement Google OAuth2 login,"As a user, I want to sign in with my Google account, so that I don't need a separate password for this platform.
+
+Acceptance Criteria:
+- Standard authorization-code flow with PKCE
+- First-time login auto-provisions a user record linked via external_logins
+- Existing email match links rather than duplicates the account",5,Medium,Identity,"oauth--oidc-login,Phase-A"
+Story,,IAM - Identity & Access Service,Implement GitHub OAuth2 login,"As a user, I want to sign in with my GitHub account, so that I have another social login option.
+
+Acceptance Criteria:
+- Same flow shape as Google login
+- Handles GitHub's email-may-be-private case explicitly",5,Medium,Identity,"oauth--oidc-login,Phase-A"
+Story,,IAM - Identity & Access Service,Implement generic OIDC provider support,"As an instance administrator, I want to configure an arbitrary OIDC provider (e.g. for enterprise SSO), so that my organisation can use its existing identity provider.
+
+Acceptance Criteria:
+- Provider metadata configurable without a code change
+- Claims mapping is configurable
+- Documented setup guide for a common provider (Okta/Azure AD) as a worked example",8,Low,Identity,"oauth--oidc-login,Phase-A"
+Story,,IAM - Identity & Access Service,Implement workspace creation with default roles,"As a user, I want to create a workspace and automatically get Administrator/Developer/App Viewer roles for it, so that I have a working permission structure from the moment the workspace exists.
+
+Acceptance Criteria:
+- Three roles created with the correct default grants, matching the current AppsmithRole definitions
+- Creator is assigned to Administrator
+- All of this happens in one local transaction",8,High,Identity,"workspace-management,Phase-A"
+Story,,IAM - Identity & Access Service,Implement workspace CRUD,"As a workspace administrator, I want to view, rename and delete my workspace, so that I can manage its lifecycle.
+
+Acceptance Criteria:
+- Rename validates uniqueness where required
+- Delete initiates the WorkspaceDeleted saga rather than deleting synchronously
+- Only Administrators can delete a workspace",5,High,Identity,"workspace-management,Phase-A"
+Story,,IAM - Identity & Access Service,Implement workspace list for the current user,"As the Angular client, I want an endpoint returning every workspace the current user belongs to, so that the home screen can render the workspace switcher.
+
+Acceptance Criteria:
+- Returns only workspaces the user is a member of
+- Includes the user's effective role per workspace
+- Matches the current /workspaces/home contract",3,High,Identity,"workspace-management,Phase-A"
+Story,,IAM - Identity & Access Service,Implement workspace member list and role change,"As a workspace administrator, I want to view members and change a member's role, so that I can manage who has what access.
+
+Acceptance Criteria:
+- Role change publishes RoleAssignmentChanged
+- Only users with assign:permissionGroups may change roles
+- Cannot remove the last Administrator from a workspace",5,High,Identity,"workspace-management,Phase-A"
+Story,,IAM - Identity & Access Service,Implement invite users to a workspace,"As a workspace administrator, I want to invite people by email to a specific role, so that my team can start collaborating.
+
+Acceptance Criteria:
+- Creates a placeholder user if the email doesn't exist yet
+- Publishes WorkspaceMemberAdded for the Notifications service to send the invite email
+- Bulk-invite (multiple emails in one call) is supported",8,High,Identity,"workspace-management,Phase-A"
+Story,,IAM - Identity & Access Service,Implement leave-workspace,"As a workspace member, I want to remove myself from a workspace, so that I can stop being associated with a workspace I no longer need.
+
+Acceptance Criteria:
+- The last remaining Administrator cannot leave without transferring the role first
+- Publishes WorkspaceMemberRemoved
+- Session/role-set cache invalidated immediately for that user",3,Medium,Identity,"workspace-management,Phase-A"
+Story,,IAM - Identity & Access Service,Implement role and permission_grants schema and CRUD,"As a backend developer, I want tables and endpoints for roles and their grants, so that the authorization model has somewhere to live.
+
+Acceptance Criteria:
+- Matches the identity_db DDL for roles/role_assignments/permission_grants
+- Unique constraint prevents duplicate grants
+- System roles (Admin/Developer/Viewer) are flagged is_system and protected from deletion",8,High,Identity,"roles-&-permission-grants-rbac,Phase-A"
+Story,,IAM - Identity & Access Service,Apply the permission cascade graph on resource creation,"As a backend developer, I want new resources to receive grants derived from the workspace's roles via the ported permission graph, so that a new application/page/action is correctly accessible the moment it's created.
+
+Acceptance Criteria:
+- Uses BuildingBlocks.Authorization's ported graph, not a local reimplementation
+- Verified against the current PolicyGeneratorCE cascade cases
+- Covers both hierarchy (parent-to-child) and lateral (same-resource) grants",8,High,Identity,"roles-&-permission-grants-rbac,Phase-A"
+Story,,IAM - Identity & Access Service,Publish permission change events via the outbox,"As a backend developer, I want PermissionGrantChanged and RoleAssignmentChanged published transactionally whenever grants or assignments change, so that downstream services can keep their authz_grants projections current.
+
+Acceptance Criteria:
+- Every grant/assignment mutation writes to the outbox in the same transaction
+- Event payload carries enough detail for a consumer to apply a targeted update
+- Verified end-to-end with a test consumer",5,High,Identity,"roles-&-permission-grants-rbac,Phase-A"
+Story,,IAM - Identity & Access Service,Pre-seed the anonymous role,"As a platform engineer, I want an anonymous role created automatically for every instance, so that making an application public has a role to grant, matching today's behaviour.
+
+Acceptance Criteria:
+- Anonymous role exists exactly once per instance
+- Role id is discoverable by services that need to grant it (e.g. on changeAccess)
+- Covered by an integration test for the public-app flow",3,Medium,Identity,"roles-&-permission-grants-rbac,Phase-A"
+Story,,IAM - Identity & Access Service,Implement the ValidateSession gRPC endpoint,"As the API Gateway, I want a fast gRPC call that resolves a session to a UserContext, so that the gateway can authenticate every request without hitting the database each time.
+
+Acceptance Criteria:
+- Response includes userId, instanceId, email, roleIds and anonymous/instance-admin flags
+- p99 latency documented and load-tested
+- Unknown/expired sessions return a clear unauthenticated result, not an exception",5,High,Identity,"session-validation-grpc-api,Phase-A"
+Story,,IAM - Identity & Access Service,Implement RevokeUserSessions,"As the API Gateway, I want a gRPC call that immediately invalidates a user's cached sessions, so that hard revocations (removed from workspace, deactivated) take effect instantly.
+
+Acceptance Criteria:
+- Called on WorkspaceMemberRemoved and UserDeactivated
+- Gateway's Redis session cache is cleared for that user within the call
+- Covered by an integration test asserting the next request is unauthenticated",5,High,Identity,"session-validation-grpc-api,Phase-A"
+Story,,IAM - Identity & Access Service,Wire outbox publishing for every identity event,"As a backend developer, I want every domain event listed in the Contracts & Events catalog published reliably, so that every consuming service (Application, Datasource, Notifications, Gateway) gets a complete, ordered event stream.
+
+Acceptance Criteria:
+- Every event type in the catalog has a corresponding outbox write path
+- Dispatcher publishes to RabbitMQ within the documented latency budget
+- Verified with an integration test per event type",5,High,Identity,"identity-event-publishing,Phase-A"
+Story,,IAM - Identity & Access Service,Implement the WorkspaceDeleted saga initiator,"As a workspace administrator, I want deleting a workspace to kick off a tracked cascade across Application, Datasource and Git, so that deletion completes correctly even though the data lives in other services.
+
+Acceptance Criteria:
+- Workspace is marked deleting immediately and disappears from listings
+- Waits for acknowledgement from all three participants before finalising
+- Times out to an operator-visible alert rather than hanging silently forever",8,Medium,Identity,"identity-event-publishing,Phase-A"
+Epic,APP - Application Service,,Application Service,"Everything a user authors: applications, pages, layouts, actions, JS objects, themes — one transactional aggregate, kept together so publish stays atomic.",,,Application,Phase-B
+Story,,APP - Application Service,Create the application_db schema,"As a backend developer, I want EF Core migrations for applications and application_pages, so that the service has a database matching the target design.
+
+Acceptance Criteria:
+- Matches Database per Service §5.2
+- draft_*/published_* columns present on applications
+- base_id/ref_name unique constraint in place for git branching",5,High,Application,"application-crud,Phase-B"
+Story,,APP - Application Service,Implement create application,"As a user, I want to create a new application in a workspace, so that I can start building.
+
+Acceptance Criteria:
+- Auto-creates a default Page1 with an empty layout
+- Name collisions get a sequence suffix (e.g. 'Untitled application 3')
+- Policies/grants inherited from the workspace via the cascade graph",8,High,Application,"application-crud,Phase-B"
+Story,,APP - Application Service,Implement application CRUD endpoints,"As a user, I want to view, rename and delete my applications, so that I can manage their lifecycle.
+
+Acceptance Criteria:
+- Delete is a soft delete (deleted_at), not a hard delete
+- Rename updates the slug consistently
+- Read enforces the authz_grants join, returning 404 not 403 on denial",5,High,Application,"application-crud,Phase-B"
+Story,,APP - Application Service,Implement the application list for the home screen,"As the Angular client, I want an endpoint returning applications in a workspace with summary metadata, so that the home screen renders without N+1 calls.
+
+Acceptance Criteria:
+- Includes name, icon, color, last-edited and last-deployed timestamps
+- Excludes soft-deleted applications
+- Paginated for workspaces with many applications",3,High,Application,"application-crud,Phase-B"
+Story,,APP - Application Service,Implement change-access (make public/private),"As a user, I want to toggle whether my published application is publicly viewable, so that I can share it without requiring a login.
+
+Acceptance Criteria:
+- Publishes ApplicationAccessChanged for Identity to grant/revoke the anonymous role
+- Change takes effect for new requests immediately
+- Only users with makePublic rights may toggle it",5,Medium,Application,"application-crud,Phase-B"
+Story,,APP - Application Service,Implement clone application,"As a user, I want to duplicate an application within the same workspace, so that I can experiment without risking the original.
+
+Acceptance Criteria:
+- Clone gets a fresh id and base_id, name suffixed appropriately
+- All pages, actions, collections and theme are duplicated
+- Clone appears immediately in the application list",5,Medium,Application,"application-crud,Phase-B"
+Story,,APP - Application Service,Create the pages schema,"As a backend developer, I want the pages table with draft/published columns as designed, so that the draft/published model has a home.
+
+Acceptance Criteria:
+- draft_layout and published_layout are jsonb
+- Unique (base_id, ref_name) constraint
+- Partial index on application_id where deleted_at is null",5,High,Application,"page-&-layout-management,Phase-B"
+Story,,APP - Application Service,Implement page CRUD endpoints,"As a user, I want to create, read, update and delete pages within an application, so that I can structure my application into multiple screens.
+
+Acceptance Criteria:
+- Create inserts with an empty draft_layout
+- Delete is soft, honoured by publish's hard-delete-of-removed-pages step
+- Read (edit and view variants) matches current contract shapes",5,High,Application,"page-&-layout-management,Phase-B"
+Story,,APP - Application Service,Implement page reorder and make-default,"As a user, I want to reorder pages and set which one is the default, so that navigation and the initial view load correctly.
+
+Acceptance Criteria:
+- application_pages ordering updates atomically
+- Exactly one page can be default per application
+- Reflected immediately in the application_pages projection used by page load",3,Medium,Application,"page-&-layout-management,Phase-B"
+Story,,APP - Application Service,Implement clone page,"As a user, I want to duplicate a page including its actions, so that I can reuse a page layout as a starting point elsewhere.
+
+Acceptance Criteria:
+- Clones the page's actions and action collections along with it
+- New page gets a fresh id and base_id
+- Bindings referencing the cloned actions are rewritten to the new ids",5,Medium,Application,"page-&-layout-management,Phase-B"
+Story,,APP - Application Service,Implement the binding extractor,"As a backend developer, I want an Esprima-based parser that walks a DSL and extracts every {{ }} binding's referenced identifiers, so that the on-load dependency engine has real input to work with.
+
+Acceptance Criteria:
+- Handles nested widget trees of arbitrary depth
+- Handles multi-statement JS bindings, not just simple property lookups
+- Unit tested against a representative sample of binding syntaxes from the DSL corpus",8,High,Application,"canvas-dsl-save-&-binding-analysis,Phase-B"
+Story,,APP - Application Service,Implement the layout save endpoint,"As a user, I want to save my canvas edits, so that my changes persist.
+
+Acceptance Criteria:
+- Writes to draft_layout as jsonb with no field-name escaping needed
+- Triggers binding analysis and on-load plan recomputation in the same request
+- Response matches the current LayoutDTO contract",5,High,Application,"canvas-dsl-save-&-binding-analysis,Phase-B"
+Story,,APP - Application Service,Verify binding-analysis parity against the Java+RTS baseline,"As a tech lead, I want the new in-process analyser's output compared against the Java system's RTS-backed output across the full DSL corpus, so that we know binding semantics haven't silently changed before this ships.
+
+Acceptance Criteria:
+- Diff run across every fixture in the DSL corpus
+- Zero unexplained mismatches, or every mismatch triaged and signed off
+- This is a go/no-go checkpoint per the roadmap — result recorded",8,Highest,Application,"canvas-dsl-save-&-binding-analysis,Phase-B"
+Story,,APP - Application Service,Implement the dependency DAG builder,"As a backend developer, I want a graph built from binding edges with cycle detection, so that the on-load plan can be computed correctly and cycles are surfaced as errors, not infinite loops.
+
+Acceptance Criteria:
+- Cycle detection reports which entities form the cycle
+- Graph construction is a pure function, unit-testable without a database",8,High,Application,"on-load-action-dependency-engine,Phase-B"
+Story,,APP - Application Service,Implement topological sort into waves,"As a backend developer, I want the dependency graph sorted into parallelisable waves, so that the client receives an onload plan matching today's layoutOnLoadActions shape.
+
+Acceptance Criteria:
+- Output type is a list of sets, matching the current wave structure exactly
+- Actions with no dependencies land in the earliest possible wave
+- Verified against the DSL corpus's existing onload plans",5,High,Application,"on-load-action-dependency-engine,Phase-B"
+Story,,APP - Application Service,Persist the on-load plan and run-behaviour flags,"As a backend developer, I want the computed plan written to draft_onload_plan alongside per-action executeOnLoad/runBehaviour flags, so that the editor and viewer both have a correct execution order.
+
+Acceptance Criteria:
+- Plan recomputes on every layout save, not just on demand
+- runBehaviour toggle endpoints update the plan without requiring a full layout save",3,High,Application,"on-load-action-dependency-engine,Phase-B"
+Story,,APP - Application Service,Implement the actions schema and CRUD,"As a backend developer / user, I want the actions table and endpoints for creating, updating and deleting queries, so that users can define what their application queries.
+
+Acceptance Criteria:
+- draft_config/published_config store the ActionConfiguration as jsonb
+- plugin_id and datasource_id reference Execution/Datasource services by id, not by embedded copy
+- CRUD enforces authz_grants exactly as pages do",5,High,Application,"actions-&-js-objects-crud,Phase-B"
+Story,,APP - Application Service,Implement JS Objects (action_collections) CRUD,"As a user, I want to create and edit JS Objects containing multiple functions, so that I can write reusable logic bound from the canvas.
+
+Acceptance Criteria:
+- draft_body stores the JS source as text, not jsonb
+- Update-body endpoint matches the current PUT .../body contract
+- Delete cascades to functions defined within it",5,High,Application,"actions-&-js-objects-crud,Phase-B"
+Story,,APP - Application Service,Implement move-action between pages,"As a user, I want to move a query from one page to another, so that I can reorganise my application.
+
+Acceptance Criteria:
+- Updates page_id and re-runs onload-plan computation for both the old and new page
+- Bindings referencing the action by name continue to resolve",3,Medium,Application,"actions-&-js-objects-crud,Phase-B"
+Story,,APP - Application Service,Implement executeOnLoad and runBehaviour toggle endpoints,"As a user, I want to control whether and how a query runs automatically, so that I can tune my application's load-time behaviour.
+
+Acceptance Criteria:
+- Toggle takes effect on the next onload-plan computation
+- Matches the current PUT .../executeOnLoad/{id} and .../runBehaviour/{id} contracts",3,Medium,Application,"actions-&-js-objects-crud,Phase-B"
+Story,,APP - Application Service,Implement entity rename with binding rewrite,"As a user, I want to rename a query or widget and have every binding that references it update automatically, so that I don't have to manually find and fix every reference myself.
+
+Acceptance Criteria:
+- Scans every page's draft_layout and every action's draft_config for references to the old name
+- Rewrite is atomic — either every reference updates or none do
+- Matches the current PUT /layouts/refactor and /actions/refactor contracts",8,Medium,Application,"refactor--rename-with-binding-rewrite,Phase-B"
+Story,,APP - Application Service,Implement themes CRUD and default assignment,"As a user, I want to select and customise a theme for my application, so that my application has consistent styling.
+
+Acceptance Criteria:
+- New applications get a default system theme assigned automatically
+- Custom theme properties stored as jsonb
+- Applying a theme updates draft_theme_id without touching published_theme_id",5,Medium,Application,"themes-&-custom-js-libraries,Phase-B"
+Story,,APP - Application Service,Implement custom JS library add/remove,"As a user, I want to import a JS library and use it in my bindings, so that I can use third-party functionality in my logic.
+
+Acceptance Criteria:
+- Library metadata (name/version/url/defs) stored once and referenced, not duplicated per application
+- Add/remove endpoints match current .../libraries/{id}/add and /remove contracts",5,Medium,Application,"themes-&-custom-js-libraries,Phase-B"
+Story,,APP - Application Service,Implement application snapshots,"As a user, I want the system to take a snapshot before risky operations and let me restore from one, so that I have a safety net.
+
+Acceptance Criteria:
+- Snapshot stores a compressed artifact JSON, not live entity rows
+- Restore endpoint round-trips correctly against the snapshot format
+- Old snapshots are prunable",5,Low,Application,"snapshots-&-static-urls,Phase-B"
+Story,,APP - Application Service,Implement static URL slugs,"As a user, I want to set a custom human-readable URL for my published application, so that I can share a memorable link.
+
+Acceptance Criteria:
+- Slug uniqueness enforced instance-wide
+- Verify-availability endpoint matches current contract
+- Published-app lookup by slug is a single indexed query",3,Low,Application,"snapshots-&-static-urls,Phase-B"
+Story,,APP - Application Service,Implement publish as a single transaction,"As a user, I want to publish my application and have every page/action/theme change go live together, so that my published app is never left in a half-updated state.
+
+Acceptance Criteria:
+- All published_* column updates happen inside one BEGIN/COMMIT
+- Soft-deleted pages/actions are hard-deleted as part of the same transaction
+- Matches Database per Service §3's publish SQL",8,High,Application,"publish-atomic,Phase-B"
+Story,,APP - Application Service,Prove publish atomicity under fault injection,"As a tech lead, I want a test that kills the process mid-publish and verifies the database shows either the full old state or the full new state, never a mix, so that the 'publish is atomic' claim is verified, not assumed.
+
+Acceptance Criteria:
+- Test injects a failure between two of the publish sub-steps
+- Post-crash state is verified as fully-rolled-back
+- This is a go/no-go checkpoint per the roadmap — result recorded",5,Highest,Application,"publish-atomic,Phase-B"
+Story,,APP - Application Service,Publish the ApplicationPublished event,"As a backend developer, I want the outbox to emit ApplicationPublished on successful publish, so that Realtime and Notifications can react.
+
+Acceptance Criteria:
+- Event carries applicationId, workspaceId, publishedAt, publishedBy
+- Written in the same transaction as the publish itself",3,High,Application,"publish-atomic,Phase-B"
+Story,,APP - Application Service,Implement the export serializer,"As a backend developer, I want a serializer that strips ids/policies/secrets from every entity type, matching sanitiseToExportDBObject, so that exported applications are portable and don't leak internal state.
+
+Acceptance Criteria:
+- Covers Application, Page, Action, ActionCollection, Theme, CustomJSLib
+- Output is deterministic — same input always produces the same JSON",8,High,Application,"export-import-serialization,Phase-B"
+Story,,APP - Application Service,Implement the full application export endpoint,"As a user, I want to export my application as a single JSON file, so that I can back it up or move it elsewhere.
+
+Acceptance Criteria:
+- Matches the current GET /applications/export/{id} contract shape
+- Includes a call to Datasource Service for config (secrets excluded)",5,High,Application,"export-import-serialization,Phase-B"
+Story,,APP - Application Service,Implement the import serializer with id remapping,"As a backend developer, I want an importer that assigns fresh ids to every entity and remaps every internal reference, so that importing doesn't collide with or corrupt existing data.
+
+Acceptance Criteria:
+- Remap table covers pageId, actionId, collectionId, datasourceId, themeId references
+- Import is transactional — a failure leaves no orphaned rows
+- Imported datasources arrive isConfigured:false, matching current behaviour",8,High,Application,"export-import-serialization,Phase-B"
+Story,,APP - Application Service,Implement fork orchestration,"As a user, I want to fork an application into another workspace, so that I can build on an existing application without affecting the original.
+
+Acceptance Criteria:
+- Local transaction creates the new application tree with fresh ids
+- CloneDatasources gRPC call made to Datasource Service for referenced datasources
+- Success returns the new application id",8,High,Application,"fork-saga,Phase-B"
+Story,,APP - Application Service,Implement fork compensation,"As a backend developer, I want a compensating rollback when the datasource clone step fails, so that a partial fork never leaves orphaned data.
+
+Acceptance Criteria:
+- Calls the idempotent DeleteClonedDatasources endpoint on failure
+- Deletes the newly created application tree
+- Returns a clear failure reason to the caller, not a generic 500",8,High,Application,"fork-saga,Phase-B"
+Story,,APP - Application Service,Implement import orchestration,"As a user, I want to import an application from an uploaded JSON file, so that I can bring in an application built elsewhere.
+
+Acceptance Criteria:
+- Same orchestration and compensation shape as Fork
+- Handles a source that references datasources not yet present in the target workspace",8,Medium,Application,"import-saga,Phase-B"
+Story,,APP - Application Service,Implement the datasources-needed-for-import endpoint,"As the Angular client, I want to know which datasources an import will need before committing to it, so that I can prompt the user to configure them.
+
+Acceptance Criteria:
+- Matches the current GET .../import/{workspaceId}/datasources contract
+- Distinguishes datasources that already exist in the target workspace from ones that don't",3,Medium,Application,"import-saga,Phase-B"
+Story,,APP - Application Service,Implement the authz_grants table and event consumer,"As a backend developer, I want a local authorization projection fed by PermissionGrantChanged events, so that every resource read stays a single indexed query with no cross-service call.
+
+Acceptance Criteria:
+- Consumer is idempotent (inbox table) under at-least-once delivery
+- Projection lag is measured and alerts above the 5s p99 budget
+- Matches Security & AuthZ §2's design",8,High,Application,"authorization-projection,Phase-B"
+Story,,APP - Application Service,Implement the Authorized<T>() query helper,"As a backend developer, I want one shared query predicate applied to every protected-resource read and write, so that no endpoint can accidentally skip the authorization join.
+
+Acceptance Criteria:
+- Every existing endpoint is verified to use it, not a hand-rolled check
+- Zero rows returns 404, matching current behaviour
+- Covered by the per-service authorization checklist in the security doc",5,High,Application,"authorization-projection,Phase-B"
+Story,,APP - Application Service,Implement the projection-rebuild admin endpoint,"As an operator, I want to rebuild authz_grants from scratch from Identity's current state, so that projection drift is recoverable without a database restore.
+
+Acceptance Criteria:
+- Rebuild is safe to run against a live, in-use projection table
+- Progress is observable, not a black box
+- Documented in the service's runbook",5,Medium,Application,"authorization-projection,Phase-B"
+Story,,APP - Application Service,Implement artifact assembly for commit,"As a backend developer, I want Application Service to assemble the full exportable artifact plus a call to Datasource Service for configs before handing off to Git, so that Git Service never needs to understand the domain model.
+
+Acceptance Criteria:
+- Assembly reuses the export serializer from the Export/Import feature
+- Datasource configs fetched via GetDatasourceConfigs with secrets excluded",5,Medium,Application,"git-integration-surface,Phase-B"
+Story,,APP - Application Service,Implement Commit/Push/Pull gRPC client calls,"As a user, I want to commit, push and pull my application's git state from the editor, so that I can version-control my application.
+
+Acceptance Criteria:
+- Pull's returned artifact JSON is imported using the same import path as manual import
+- Commit/Push status is returned synchronously to the caller, matching current UX",5,Medium,Application,"git-integration-surface,Phase-B"
+Epic,DS - Datasource Service,,Datasource Service,Manage connection configuration safely and separately from anything that executes — the config half of the plugin story.,,,Datasource,Phase-B
+Story,,DS - Datasource Service,Create the datasource_db schema,"As a backend developer, I want EF Core migrations for datasources, environments and datasource_storages, so that the service has a database matching the target design.
+
+Acceptance Criteria:
+- Matches Database per Service §5.3
+- No secret material columns present — secret_ref only",3,High,Datasource,"datasource-&-environment-crud,Phase-B"
+Story,,DS - Datasource Service,Implement datasource CRUD endpoints,"As a user, I want to create, view, rename and delete datasources, so that I can manage my workspace's connections.
+
+Acceptance Criteria:
+- Delete is soft; in-use datasources are handled per the documented deletion contract
+- Name uniqueness enforced per workspace",5,High,Datasource,"datasource-&-environment-crud,Phase-B"
+Story,,DS - Datasource Service,Implement default-environment auto-creation,"As a backend developer, I want a default environment created automatically when a workspace is created, so that CE users never have to think about the environment concept.
+
+Acceptance Criteria:
+- Exactly one default environment per workspace
+- Model still supports adding more environments for a future EE scenario",2,Medium,Datasource,"datasource-&-environment-crud,Phase-B"
+Story,,DS - Datasource Service,Create the datasource_storages schema with secret references,"As a backend developer, I want storage rows that hold non-secret config as jsonb and a secret_ref pointer, so that no credential ever lands in this database.
+
+Acceptance Criteria:
+- Unique (datasource_id, environment_id) constraint
+- configuration column never contains password/key/token fields",5,High,Datasource,"datasource-storage-&-secrets,Phase-B"
+Story,,DS - Datasource Service,Integrate the secrets manager,"As a backend developer, I want datasource storage writes to route secret fields through ISecretStore, so that credentials are stored, versioned and rotatable outside this database.
+
+Acceptance Criteria:
+- Write path splits config into non-secret and secret halves automatically
+- Delete of a datasource also deletes its secret via the store
+- Covered by an integration test against the chosen provider's test/dev instance",8,High,Datasource,"datasource-storage-&-secrets,Phase-B"
+Story,,DS - Datasource Service,Implement update-storage-config endpoint,"As a user, I want to edit a datasource's connection details, so that I can fix or change how it connects.
+
+Acceptance Criteria:
+- Matches the current PUT /datasources/datasource-storages contract
+- isConfigured and invalids fields update based on validation result",5,High,Datasource,"datasource-storage-&-secrets,Phase-B"
+Story,,DS - Datasource Service,Implement test-connection,"As a user, I want to test a datasource's connection before saving it, so that I know it works before I rely on it.
+
+Acceptance Criteria:
+- Delegates to Execution.TestConnection over gRPC with a timeout
+- Returns a clear pass/fail with a human-readable reason on failure",5,High,Datasource,"datasource-storage-&-secrets,Phase-B"
+Story,,DS - Datasource Service,Implement the plugin catalog replica and consumer,"As a backend developer, I want a local read-only plugins table kept current via PluginCatalogUpdated events, so that datasource creation and the connector picker work without calling Execution synchronously.
+
+Acceptance Criteria:
+- Consumer is idempotent
+- Staleness budget (documented at <1h) is met in testing",5,Medium,Datasource,"plugin-catalog-replica,Phase-B"
+Story,,DS - Datasource Service,Implement plugin catalog endpoints,"As the Angular client, I want GET /plugins and GET /plugins/{id}/form, so that the datasource creation UI can render the connector picker and its config form.
+
+Acceptance Criteria:
+- Form schema returned matches what Execution publishes
+- Response cacheable at the gateway given the low change frequency",3,Medium,Datasource,"plugin-catalog-replica,Phase-B"
+Story,,DS - Datasource Service,Publish DatasourceConfigChanged with a monotonic version,"As a backend developer, I want every config write to publish an event carrying an incrementing version number, so that Query Execution's cache can detect and discard out-of-order delivery.
+
+Acceptance Criteria:
+- Version increments strictly on every write to the same (datasourceId, environmentId)
+- Verified with a test that delivers events out of order and confirms the cache resolves to the latest",5,High,Datasource,"config-change-publishing,Phase-B"
+Story,,DS - Datasource Service,Publish DatasourceDeleted and handle cascading cleanup,"As a backend developer, I want deletion to notify Application (summary cleanup) and Execution (pool/cache eviction), so that no service holds a dangling reference to a deleted datasource.
+
+Acceptance Criteria:
+- Event published in the same transaction as the delete
+- Application Service's datasource_summaries row is removed on consumption",5,Medium,Datasource,"config-change-publishing,Phase-B"
+Story,,DS - Datasource Service,Implement SaaS OAuth2 authorize/token endpoints,"As a user, I want to authorize a SaaS connector (e.g. Google Sheets) via OAuth2, so that I can connect without pasting raw credentials.
+
+Acceptance Criteria:
+- Matches the current /saas/{id}/oauth and /saas/{id}/token contracts
+- Refresh-token handling verified against at least one real SaaS provider",8,Low,Datasource,"oauth2-for-saas-datasources,Phase-B"
+Story,,DS - Datasource Service,Implement CloneDatasources gRPC,"As Application Service, I want a call that clones a set of datasources into a target workspace and returns the id remap, so that the Fork saga can complete its second local transaction.
+
+Acceptance Criteria:
+- Clone includes storage config but re-marks isConfigured:false where secrets can't be safely copied across workspace boundaries, per current export behaviour
+- Returns a complete oldId→newId map",8,High,Datasource,"clonedatasources-for-fork,Phase-B"
+Story,,DS - Datasource Service,Implement idempotent DeleteClonedDatasources,"As Application Service, I want a compensating call that safely deletes cloned datasources even if called twice, so that fork compensation is safe to retry.
+
+Acceptance Criteria:
+- Second call on already-deleted ids is a no-op, not an error
+- Deletes the associated secrets too",5,High,Datasource,"clonedatasources-for-fork,Phase-B"
+Story,,DS - Datasource Service,Implement the authz_grants table and event consumer,"As a backend developer, I want the same local authorization projection pattern as Application Service, so that datasource reads stay a single indexed query.
+
+Acceptance Criteria:
+- Shares the BuildingBlocks.Authorization graph implementation
+- Consumer is idempotent and lag-monitored",5,High,Datasource,"authorization-projection,Phase-B"
+Epic,EXEC - Query Execution Service,,Query Execution Service,"Run all 25 connector types in isolated, resource-capped worker pools. The largest reliability improvement in the programme.",,,Execution,Phase-C
+Story,,EXEC - Query Execution Service,Create the execution_db schema,"As a backend developer, I want the plugins, plugin_forms, datasource_config_cache and partitioned execution_audit tables, so that the service has somewhere to route from and record to.
+
+Acceptance Criteria:
+- execution_audit is partitioned by time as designed
+- Matches Database per Service §5.4",5,High,Execution,"grpc-router-&-audit,Phase-C"
+Story,,EXEC - Query Execution Service,Implement the ExecuteAction gRPC router,"As Application Service, I want a stateless endpoint that dispatches to the correct worker pool by plugin type, so that query execution has a single entry point regardless of connector.
+
+Acceptance Criteria:
+- Router itself contains no connector logic
+- Every call carries and enforces a deadline",5,High,Execution,"grpc-router-&-audit,Phase-C"
+Story,,EXEC - Query Execution Service,Implement the datasource config cache consumer,"As a backend developer, I want a local jsonb cache kept current via DatasourceConfigChanged, with staleness detection, so that execution reads config without a network hop on the hot path.
+
+Acceptance Criteria:
+- Version field used to detect and resolve staleness against the caller's expectation
+- Synchronous refetch path exists for the rare stale-cache case",5,High,Execution,"grpc-router-&-audit,Phase-C"
+Story,,EXEC - Query Execution Service,Implement the worker dispatch model,"As a platform engineer, I want each worker pool as a separately deployable container with a defined IPC/gRPC contract to the router, so that connector families can scale and fail independently.
+
+Acceptance Criteria:
+- Router-to-worker contract documented and versioned
+- Adding a new worker pool requires no router code change beyond configuration",8,High,Execution,"worker-process-isolation-model,Phase-C"
+Story,,EXEC - Query Execution Service,"Enforce CPU, memory and wall-clock limits","As a platform engineer, I want container-level resource limits on every worker pool, with the deadline propagated from the gRPC call, so that a runaway connector can't degrade the platform.
+
+Acceptance Criteria:
+- Limits configurable per worker pool
+- A hostile connector test suite (infinite loop, huge allocation, huge result set) is contained without affecting other pools — this is a go/no-go checkpoint",8,Highest,Execution,"worker-process-isolation-model,Phase-C"
+Story,,EXEC - Query Execution Service,Enforce network egress policy on workers,"As a security engineer, I want workers restricted to customer-system egress only, with no path to internal services or the secrets manager, so that a compromised connector can't pivot into the platform.
+
+Acceptance Criteria:
+- Network policy verified with a test that attempts a call to an internal service from inside a worker and confirms it's blocked
+- Documented in the service's runbook",5,High,Execution,"worker-process-isolation-model,Phase-C"
+Story,,EXEC - Query Execution Service,Enforce result-size caps,"As a platform engineer, I want a hard cap on response size at the router, so that a query returning an enormous result set fails cleanly instead of exhausting memory.
+
+Acceptance Criteria:
+- Cap is configurable
+- Failure returns a clear, actionable error to the user, not a generic timeout",3,Medium,Execution,"worker-process-isolation-model,Phase-C"
+Story,,EXEC - Query Execution Service,Port the Postgres connector,"As a user, I want to run queries against a Postgres datasource, so that I can build applications on Postgres data.
+
+Acceptance Criteria:
+- Golden-file suite captured from postgresPlugin passes
+- Connection pooling scoped per (datasourceId, environmentId) at the worker-pool level",8,High,Execution,"sql-connector-worker-pool,Phase-C"
+Story,,EXEC - Query Execution Service,Port the MySQL connector,"As a user, I want to run queries against a MySQL datasource, so that I can build applications on MySQL data.
+
+Acceptance Criteria:
+- Golden-file suite captured from mysqlPlugin passes",8,High,Execution,"sql-connector-worker-pool,Phase-C"
+Story,,EXEC - Query Execution Service,Port the remaining SQL connectors,"As a user, I want MSSQL, Oracle, Redshift, Snowflake and Databricks support, so that the platform covers the same relational connector breadth as today.
+
+Acceptance Criteria:
+- Each has its own golden-file suite, ported in this order by observed traffic
+- No connector ships without its suite passing",13,Medium,Execution,"sql-connector-worker-pool,Phase-C"
+Story,,EXEC - Query Execution Service,Port the REST API connector,"As a user, I want to call arbitrary REST APIs as a datasource, so that I can integrate with external HTTP services.
+
+Acceptance Criteria:
+- Golden-file suite captured from restApiPlugin passes, including auth modes and pagination
+- Handles the current SSRF-relevant hint messages (localhost warnings) equivalently",8,High,Execution,"http-connector-worker-pool,Phase-C"
+Story,,EXEC - Query Execution Service,Port the GraphQL connector,"As a user, I want to query GraphQL APIs as a datasource, so that I can integrate with GraphQL services.
+
+Acceptance Criteria:
+- Golden-file suite captured from graphqlPlugin passes",5,Medium,Execution,"http-connector-worker-pool,Phase-C"
+Story,,EXEC - Query Execution Service,Port the SaaS connector framework,"As a user, I want OAuth2-backed SaaS connectors (e.g. Google Sheets) to work end-to-end, so that I can connect to SaaS platforms, not just raw HTTP.
+
+Acceptance Criteria:
+- Integrates with Datasource Service's SaaS OAuth2 endpoints
+- Golden-file suite for at least one SaaS connector passes",5,Medium,Execution,"http-connector-worker-pool,Phase-C"
+Story,,EXEC - Query Execution Service,Implement the sandboxed JS worker,"As a user, I want my JS Object functions to execute safely on the server when used as datasource-independent logic, so that server-side JS behaves correctly without risking the platform.
+
+Acceptance Criteria:
+- Jint sandbox with no fs/net/process access, memory and statement-count limits
+- A fresh worker is used per execution, never reused across users or requests",8,High,Execution,"js-worker,Phase-C"
+Story,,EXEC - Query Execution Service,Verify no state leaks between JS executions,"As a security engineer, I want a test that writes a global variable in one execution and asserts its absence in the next, so that one user's JS execution can never affect another's.
+
+Acceptance Criteria:
+- Test passes consistently across repeated runs
+- Documented as a permanent regression test, not a one-off check",5,High,Execution,"js-worker,Phase-C"
+Story,,EXEC - Query Execution Service,Port the NoSQL connectors,"As a user, I want MongoDB, Redis and Elasticsearch support, so that I can build applications on document/key-value/search data.
+
+Acceptance Criteria:
+- Golden-file suites pass for each, ported in traffic order",8,Medium,Execution,"nosql--cloud--ai-worker-pools,Phase-C"
+Story,,EXEC - Query Execution Service,Port the remaining NoSQL connectors,"As a user, I want DynamoDB, Firestore and ArangoDB support, so that the platform covers the same NoSQL breadth as today.
+
+Acceptance Criteria:
+- Golden-file suites pass for each",8,Low,Execution,"nosql--cloud--ai-worker-pools,Phase-C"
+Story,,EXEC - Query Execution Service,Port the cloud/storage connectors,"As a user, I want S3, Google Sheets, Lambda and SMTP support, so that I can integrate with common cloud services.
+
+Acceptance Criteria:
+- Golden-file suites pass for each
+- S3 connector reused later for object-storage-backed assets if applicable",8,Medium,Execution,"nosql--cloud--ai-worker-pools,Phase-C"
+Story,,EXEC - Query Execution Service,Port the AI connectors,"As a user, I want OpenAI, Anthropic, Google AI and the Appsmith AI connectors to work as datasources, so that I can build AI-powered applications.
+
+Acceptance Criteria:
+- Golden-file suites pass for each
+- Streaming responses (if used) are handled correctly through the gRPC contract",8,Medium,Execution,"nosql--cloud--ai-worker-pools,Phase-C"
+Story,,EXEC - Query Execution Service,Implement worker-tier connection pooling,"As a platform engineer, I want pools scoped per (datasourceId, environmentId) at the worker-pool level, not per API replica, so that the platform has a real, global connection budget per datasource for the first time.
+
+Acceptance Criteria:
+- N execution replicas no longer means N× connections against a customer database
+- Stale-connection eviction and retry-once logic ported from DatasourceContextServiceCEImpl",8,High,Execution,"connection-pooling-&-introspection,Phase-C"
+Story,,EXEC - Query Execution Service,Implement GetStructure schema introspection,"As a user, I want to see my datasource's schema in the editor, so that I can browse tables/collections while writing a query.
+
+Acceptance Criteria:
+- Result cached in Datasource Service's datasource_structures on the caller's behalf
+- Matches the current GET /datasources/{id}/structure contract",5,Medium,Execution,"connection-pooling-&-introspection,Phase-C"
+Story,,EXEC - Query Execution Service,Implement the Trigger endpoint,"As a user, I want dynamic dropdown data (e.g. list of sheets, list of buckets), so that the editor can offer contextual choices while I configure an action.
+
+Acceptance Criteria:
+- Matches current POST /datasources/{id}/trigger and /plugins/{id}/trigger contracts",5,Low,Execution,"connection-pooling-&-introspection,Phase-C"
+Story,,EXEC - Query Execution Service,Build the golden-file replay tooling,"As a tech lead, I want a test harness that loads captured Java-plugin request/response pairs and replays them against the .NET connector, so that every connector port has an automated, objective pass/fail bar.
+
+Acceptance Criteria:
+- Harness runs as part of each connector's test suite in CI
+- Failures show a clear diff between expected and actual output",8,High,Execution,"golden-file-test-harness,Phase-C"
+Story,,EXEC - Query Execution Service,Gate connector merges on golden-file suite results,"As a tech lead, I want CI to block merging a connector port without its golden-file suite passing, so that no connector reaches production without verified fidelity.
+
+Acceptance Criteria:
+- Gate is enforced at the CI level, not just by convention
+- Documented in the contribution guide for the Execution team",3,High,Execution,"golden-file-test-harness,Phase-C"
+Epic,GIT - Git Versioning Service,,Git Versioning Service,"Version-control application artifacts against a real git remote — commit, push, pull, merge, branch, and deploy-key management.",,,Git,Phase-D
+Story,,GIT - Git Versioning Service,Create the git_db schema,"As a backend developer, I want tables for repositories, branches, deploy keys and git profiles, so that the service has somewhere to track git state.
+
+Acceptance Criteria:
+- Matches Database per Service §5.5
+- git_repositories.artifact_id is unique — one repo per artifact",5,High,Git,"repository-model,Phase-D"
+Story,,GIT - Git Versioning Service,Implement the LibGit2Sharp wrapper and working-tree management,"As a backend developer, I want a clean abstraction over LibGit2Sharp with a managed working-tree volume per repository, so that git operations have a reliable local execution environment.
+
+Acceptance Criteria:
+- Working trees are placed on a documented persistent volume path
+- Wrapper exposes only the operations the service actually needs, not the full LibGit2Sharp surface",8,High,Git,"repository-model,Phase-D"
+Story,,GIT - Git Versioning Service,Implement the artifact JSON to file-tree serializer,"As a backend developer, I want a serializer producing the same pages/queries/jsobjects/datasources/jslibs directory layout as today, so that existing git-connected applications continue to diff sensibly after migration.
+
+Acceptance Criteria:
+- JS Objects still write as real .js files, not embedded JSON
+- Directory names match GitDirectoriesCE exactly",8,High,Git,"byte-stable-serialization,Phase-D"
+Story,,GIT - Git Versioning Service,Prove byte-identical serialization against the Java baseline,"As a tech lead, I want a golden test comparing .NET serializer output to Java output across the application corpus, so that a user's first commit after migration is not a whole-repo diff.
+
+Acceptance Criteria:
+- Zero byte differences across the corpus, or every difference explicitly triaged and fixed
+- This is a go/no-go checkpoint per the roadmap — blocking for migrating git-connected applications",8,Highest,Git,"byte-stable-serialization,Phase-D"
+Story,,GIT - Git Versioning Service,Implement connect-to-git,"As a user, I want to connect my application to a git remote, so that I can start version-controlling it.
+
+Acceptance Criteria:
+- Generates an SSH keypair via the secrets manager, never storing the raw private key in this database
+- Tests connectivity before confirming the connection succeeded",5,High,Git,"connect--commit--push--pull,Phase-D"
+Story,,GIT - Git Versioning Service,Implement commit with the Redis lock,"As a user, I want to commit my current changes with a message, so that I have a checkpoint I can return to.
+
+Acceptance Criteria:
+- Redis lock keyed on baseArtifactId carried over unchanged, with retry/backoff
+- Commit fails cleanly and releases the lock if serialization or git-add fails partway",8,High,Git,"connect--commit--push--pull,Phase-D"
+Story,,GIT - Git Versioning Service,Implement push,"As a user, I want to push my committed changes to the remote, so that my team and the remote history stay in sync.
+
+Acceptance Criteria:
+- Uses the SSH deploy key resolved from the secrets manager at call time, never persisted in memory longer than needed
+- Push failure (auth, network) returns a specific, actionable error",5,High,Git,"connect--commit--push--pull,Phase-D"
+Story,,GIT - Git Versioning Service,Implement pull,"As a user, I want to pull the latest remote changes into my application, so that I can incorporate changes made elsewhere.
+
+Acceptance Criteria:
+- Returns artifact JSON to Application Service, which performs the actual database import
+- Git Service itself never writes application data",5,High,Git,"connect--commit--push--pull,Phase-D"
+Story,,GIT - Git Versioning Service,Implement create/checkout/delete branch,"As a user, I want to create, switch between and delete branches, so that I can work on multiple versions of my application in parallel.
+
+Acceptance Criteria:
+- Branch creation triggers the entity-tree duplication contract with Application Service
+- Checkout switches the active branched ids the client works against",8,High,Git,"branching,Phase-D"
+Story,,GIT - Git Versioning Service,Implement the entity-tree duplication contract,"As a backend developer, I want a well-defined call from Git to Application Service that duplicates an application's entity tree for a new branch, so that branch creation produces a correct, independent copy every time.
+
+Acceptance Criteria:
+- Every page/action/collection gets a fresh id but shares the base_id of its source
+- Contract documented in the service's Contracts project",8,High,Git,"branching,Phase-D"
+Story,,GIT - Git Versioning Service,Implement branch protection,"As a user, I want to mark a branch as protected against direct commits, so that my team can enforce a review process on important branches.
+
+Acceptance Criteria:
+- Protected-branch commit attempts are rejected with a clear message
+- Matches current GET/POST .../protected contract",3,Medium,Git,"branching,Phase-D"
+Story,,GIT - Git Versioning Service,Implement status,"As a user, I want to see what's changed between my database state and the git working tree, so that I know what a commit would include before making it.
+
+Acceptance Criteria:
+- Diff is computed without mutating either side
+- Matches current GET /git/status/app/{id} contract",5,Medium,Git,"merge-&-status,Phase-D"
+Story,,GIT - Git Versioning Service,Implement merge and conflict detection,"As a user, I want to merge one branch into another and be warned about conflicts before it happens, so that I don't lose work to a silent overwrite.
+
+Acceptance Criteria:
+- Merge-status endpoint runs a dry-run check before the real merge is attempted
+- Conflicts are reported with enough detail to resolve them",8,Medium,Git,"merge-&-status,Phase-D"
+Story,,GIT - Git Versioning Service,Implement discard,"As a user, I want to discard my local database changes and reset to the last commit, so that I can undo experimentation I don't want to keep.
+
+Acceptance Criteria:
+- Resets via the same import path pull uses
+- Requires explicit confirmation given it's a destructive operation",3,Medium,Git,"merge-&-status,Phase-D"
+Story,,GIT - Git Versioning Service,Implement auto-commit with progress reporting,"As the platform, I want a background job that commits DSL/schema-migration changes automatically, with a pollable progress endpoint, so that users' next manual commit isn't a huge unrelated diff.
+
+Acceptance Criteria:
+- Progress endpoint matches current GET .../auto-commit/progress/app/{id} contract
+- Job is safe to run concurrently with the artifact-level Redis lock",8,Medium,Git,"auto-commit,Phase-D"
+Story,,GIT - Git Versioning Service,Implement deploy key management via the secrets manager,"As a backend developer, I want deploy keys generated, stored and resolved exclusively through ISecretStore, so that private keys never land in this database in plaintext, unlike today.
+
+Acceptance Criteria:
+- git_deploy_keys stores only a public key and a private_key_ref
+- Key resolution happens just-in-time for a push, never cached longer than the call",5,High,Git,"deploy-keys,Phase-D"
+Epic,RT - Realtime Collaboration Service,,Realtime Collaboration Service,"Show who else is in an app, where their cursor is, and push version-available notifications — with the cross-instance backplane today's RTS lacks.",,,Realtime,Phase-E
+Story,,RT - Realtime Collaboration Service,Scaffold the SignalR hub,"As a backend developer, I want a hub project with connection authentication delegated to Identity & Access, so that only authenticated (or correctly anonymous) users can join a presence room.
+
+Acceptance Criteria:
+- Connection auth reuses the same internal-JWT validation as other services
+- Unauthenticated connections to a private application's room are rejected",5,High,Realtime,"signalr-hub-&-auth,Phase-E"
+Story,,RT - Realtime Collaboration Service,Wire the SignalR Redis backplane,"As a backend developer, I want StackExchangeRedis backplane configuration for SignalR, so that presence works correctly across multiple service replicas.
+
+Acceptance Criteria:
+- Configuration documented and covered by an integration test using two hub instances",5,High,Realtime,"redis-backplane,Phase-E"
+Story,,RT - Realtime Collaboration Service,Verify multi-replica presence,"As a tech lead, I want a test with two service replicas and two simulated browser connections confirming each sees the other's presence, so that we've proven the one capability gap the current RTS process has.
+
+Acceptance Criteria:
+- Test runs in CI against a real Redis instance (Testcontainers)
+- This is the concrete 'genuine improvement over today' claim — verified, not assumed",5,High,Realtime,"redis-backplane,Phase-E"
+Story,,RT - Realtime Collaboration Service,Implement room join/leave,"As a user, I want to join a presence room scoped to the application and page I'm editing, so that my collaborators can see I'm here.
+
+Acceptance Criteria:
+- Room key is (applicationId, pageId)
+- Leaving (including disconnect) is detected and broadcast promptly",3,Medium,Realtime,"presence-&-cursors,Phase-E"
+Story,,RT - Realtime Collaboration Service,Implement live cursor broadcast,"As a user, I want to see my collaborators' cursor positions on the canvas in real time, so that we can avoid working on the same widget by accident.
+
+Acceptance Criteria:
+- Cursor updates are throttled to avoid flooding the hub
+- Stale cursors are cleared on disconnect",5,Medium,Realtime,"presence-&-cursors,Phase-E"
+Story,,RT - Realtime Collaboration Service,Implement the collaborator indicator list,"As a user, I want to see who else is currently in this application, so that I know who I'm collaborating with.
+
+Acceptance Criteria:
+- List updates on join/leave without a page refresh
+- Matches the visual behaviour of the current product",3,Medium,Realtime,"presence-&-cursors,Phase-E"
+Story,,RT - Realtime Collaboration Service,Implement version-published push,"As a user, I want to be notified in the editor when someone else publishes a new version while I'm working, so that I don't keep editing against stale assumptions.
+
+Acceptance Criteria:
+- Consumes ApplicationPublished and CommitCreated from the broker
+- Push doesn't force a reload — it surfaces a dismissible notice",3,Medium,Realtime,"version-push,Phase-E"
+Epic,NOTIF - Notifications & Telemetry Service,,Notifications & Telemetry Service,"Everything that happens after a user action and must never slow it down — email delivery with real retry semantics, alerts, usage and audit.",,,Notifications,Phase-F
+Story,,NOTIF - Notifications & Telemetry Service,Create the notifications_db schema,"As a backend developer, I want tables for templates, delivery_log, alerts and usage_events, so that the service has somewhere to record what it does.
+
+Acceptance Criteria:
+- Matches Database per Service §5.6
+- delivery_log indexed for the retry-due query",5,High,Notifications,"event-consumers,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Implement consumers for every domain event,"As a backend developer, I want a consumer registered for every event type published by every other service, so that nothing that should trigger a notification or audit entry is silently missed.
+
+Acceptance Criteria:
+- Every event in the Contracts & Events catalog has a corresponding consumer, even if some just write an audit row
+- All consumers are idempotent via the inbox pattern",8,High,Notifications,"event-consumers,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Port the email templates,"As a user, I want to receive welcome, verification, password-reset and invite emails matching today's content, so that the transition doesn't change what I see in my inbox.
+
+Acceptance Criteria:
+- All four current templates ported with equivalent content
+- Templates stored in notification_templates, not hardcoded",5,High,Notifications,"email-delivery,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Implement SMTP delivery,"As a backend developer, I want an SMTP client integration used by the delivery pipeline, so that templated emails actually get sent.
+
+Acceptance Criteria:
+- Configurable SMTP provider settings
+- Delivery attempt always writes to delivery_log, success or failure",5,High,Notifications,"email-delivery,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Implement retry with exponential backoff,"As a backend developer, I want failed deliveries retried automatically with backoff and a capped attempt count, so that a transient SMTP failure doesn't become a permanently lost email.
+
+Acceptance Criteria:
+- Retry schedule matches the documented intervals
+- next_retry_at drives the retry query, not a fixed polling scan of everything",8,High,Notifications,"retry-dlq-delivery-log,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Implement the dead-letter queue and operator visibility,"As an operator, I want deliveries that exhaust retries to land in a DLQ with a visible status, so that I know when something is actually broken instead of it silently vanishing, unlike today.
+
+Acceptance Criteria:
+- DLQ entries are queryable by an admin endpoint
+- This directly closes the current system's confirmed swallowed-email-failure gap",5,High,Notifications,"retry-dlq-delivery-log,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Implement product alert CRUD and acknowledgement,"As an instance administrator / user, I want to publish product alerts and let users acknowledge them, so that important announcements reach users and I can see who's seen them.
+
+Acceptance Criteria:
+- Matches current GET /product-alert/alert contract for consumption
+- Acknowledgement is per-user, per-alert",3,Low,Notifications,"product-alerts,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Implement usage event ingestion,"As the platform, I want anonymous usage-pulse-equivalent events ingested and stored, so that DAU/WAU/MAU can still be computed post-migration.
+
+Acceptance Criteria:
+- Matches current POST /usage-pulse contract at the gateway
+- user_hash is hashed, never the raw email, matching the schema design",3,Medium,Notifications,"usage-&-audit,Phase-F"
+Story,,NOTIF - Notifications & Telemetry Service,Implement the append-only audit log,"As an instance administrator, I want every domain event to be recorded in a queryable audit log, so that I can answer 'who changed this permission' or 'who ran this query', which is impossible today.
+
+Acceptance Criteria:
+- Covers permission changes, workspace membership changes, datasource config changes, publish/delete/fork, and query executions
+- This is a genuinely new capability versus the current system, which has no audit trail at all",8,Medium,Notifications,"usage-&-audit,Phase-F"
+Epic,GW - API Gateway BFF Hardening,,API Gateway BFF Hardening,"Harden the composition/BFF layer built in the Phase A skeleton — the endpoints the Angular client actually depends on for a fast, resilient page load.",,,Gateway,Phase-G
+Story,,GW - API Gateway BFF Hardening,Implement the editor consolidated-api endpoint,"As the Angular client, I want one call that fans out to Identity, Application and Datasource in parallel and returns a single payload, so that opening the editor doesn't require ten round trips.
+
+Acceptance Criteria:
+- Each slice carries its own status, matching today's per-slice error isolation
+- Matches the current GET /consolidated-api/edit contract shape",8,High,Gateway,"consolidated-api-composition,Phase-G"
+Story,,GW - API Gateway BFF Hardening,Implement the viewer consolidated-api endpoint,"As the Angular client, I want the published-app equivalent of the editor composition endpoint, so that viewing a published app is also a single round trip.
+
+Acceptance Criteria:
+- Works correctly for anonymous requests against public applications
+- Matches the current GET /consolidated-api/view contract shape",5,High,Gateway,"consolidated-api-composition,Phase-G"
+Story,,GW - API Gateway BFF Hardening,Implement the applications-home composition endpoint,"As the Angular client, I want a single call returning everything the home screen needs, so that the home screen loads without a waterfall of requests.
+
+Acceptance Criteria:
+- Matches current GET /applications/home contract",3,Medium,Gateway,"consolidated-api-composition,Phase-G"
+Story,,GW - API Gateway BFF Hardening,Implement the search-entities composition endpoint,"As a user, I want to search across applications, pages, queries and datasources from one box, so that I can find things quickly regardless of type.
+
+Acceptance Criteria:
+- Fans out to the owning services in parallel
+- Matches current GET /search-entities contract",5,Low,Gateway,"consolidated-api-composition,Phase-G"
+Story,,GW - API Gateway BFF Hardening,Implement per-endpoint rate-limit policies,"As a platform engineer, I want documented, configurable limits distinct from the Phase A defaults, tuned per endpoint class, so that high-value endpoints (login, query execution) are protected appropriately without over-throttling ordinary CRUD.
+
+Acceptance Criteria:
+- Policy set is reviewed against the current bucket4j-based limits as a baseline
+- Limits are adjustable per environment without a redeploy",5,Medium,Gateway,"rate-limiting-&-policies,Phase-G"
+Story,,GW - API Gateway BFF Hardening,Implement the asset proxy/redirect,"As a user, I want asset URLs to resolve through the gateway to object storage, so that existing links and embedded references (e.g. in exported apps) keep working.
+
+Acceptance Criteria:
+- GET /assets/{id} redirects or streams from object storage
+- Remains on the anonymous allow-list, matching current behaviour",3,Medium,Gateway,"asset-proxying,Phase-G"
+Story,,GW - API Gateway BFF Hardening,Implement the configurable public-route allow-list,"As a security engineer, I want the gateway's anonymous-access route list to be data-driven and match the current permitAll set exactly, so that public application viewing keeps working without accidentally exposing a private route.
+
+Acceptance Criteria:
+- List reviewed line-by-line against the current SecurityConfig permitAll set
+- Covered by a test asserting every listed route is reachable without a session and nothing else is",3,High,Gateway,"anonymous-allow-list,Phase-G"
+Story,,GW - API Gateway BFF Hardening,Run response-diff testing against the live Java system,"As a tech lead, I want an automated comparison of the new gateway's composition-endpoint payloads against the Java system's, for a representative set of applications, so that we know the client-facing contract hasn't silently drifted before cutover.
+
+Acceptance Criteria:
+- Diff run covers the editor, viewer and home composition endpoints
+- Zero unexplained differences, or every difference explicitly signed off as an intentional improvement
+- This is a go/no-go checkpoint per the roadmap",8,Highest,Gateway,"contract-parity-verification,Phase-G"
+Epic,NG - Angular Client,,Angular Client,"Replace the React SPA. Largest single workstream in the programme — sized and staffed accordingly, running in parallel from Phase A.",,,Client,Parallel-C0-C7
+Story,,NG - Angular Client,Scaffold the Angular workspace,"As a frontend developer, I want a standalone-components, zoneless Angular workspace matching the target project layout, so that the team has a consistent foundation to build every feature on.
+
+Acceptance Criteria:
+- Standalone components throughout, no NgModules
+- Zoneless change detection configured from day one, not retrofitted later",5,High,Client,"workspace-skeleton-c0,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the HTTP layer and interceptors,"As a frontend developer, I want one HttpClient configuration with credentials, CSRF, envelope-unwrap and correlation-id interceptors, so that every feature gets consistent API behaviour for free.
+
+Acceptance Criteria:
+- withCredentials true on every call
+- responseMeta envelope unwrapped once, not per feature
+- Mirrors today's single Api.ts pattern",5,High,Client,"workspace-skeleton-c0,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement auth flow screens,"As a user, I want login, signup and password-reset screens, so that I can get into the application.
+
+Acceptance Criteria:
+- Wired against the real Identity & Access endpoints, not mocks, by the end of this story
+- Matches current form validation behaviour",8,High,Client,"workspace-skeleton-c0,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the routing shell,"As a frontend developer, I want lazy-loaded routes separating the editor and viewer bundles, so that a published-app visitor never downloads the editor's code.
+
+Acceptance Criteria:
+- Viewer bundle size measured and tracked against the stated performance target
+- Editor route only loads after authentication",5,High,Client,"workspace-skeleton-c0,Parallel-C0-C7"
+Story,,NG - Angular Client,"Copy the evaluation engine, AST and DSL packages","As a frontend developer, I want workers/Evaluation, packages/ast and packages/dsl copied into the Angular project with no logic changes, so that years of correctness work in the binding evaluator isn't lost or rewritten.
+
+Acceptance Criteria:
+- No React dependency remains in the copied code
+- Package boundaries preserved so future upstream fixes can still be tracked",5,High,Client,"evaluation-engine-port-c1,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the EvaluationService wrapper,"As a frontend developer, I want an Angular service that owns the Web Worker and exposes its output as signals, so that the rest of the app can consume evaluation results idiomatically.
+
+Acceptance Criteria:
+- dataTree and evalErrors exposed as signals
+- postMessage contract with the worker is unchanged from the ported code",5,High,Client,"evaluation-engine-port-c1,Parallel-C0-C7"
+Story,,NG - Angular Client,Verify evaluation parity against the React baseline,"As a tech lead, I want the ported engine's output compared against the current React app's output across the full DSL corpus, so that we know the port didn't silently change binding behaviour before any UI is built on top of it.
+
+Acceptance Criteria:
+- Diff run covers every fixture in the corpus
+- This is the single highest-priority checkpoint in the whole client plan — result recorded before Stage C2 begins",8,Highest,Client,"evaluation-engine-port-c1,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the DSL renderer host,"As a frontend developer, I want a widget-registry-driven renderer using NgComponentOutlet to turn a DSL tree into a live page, so that published applications can actually be viewed.
+
+Acceptance Criteria:
+- Registry is keyed on the DSL type string, matching the target design
+- Renders a nested widget tree of arbitrary depth",8,High,Client,"published-app-viewer-c2,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement on-load action execution,"As a frontend developer, I want the viewer to execute the server-computed onload plan against the real API on page load, so that a published app's initial data loads correctly.
+
+Acceptance Criteria:
+- Waves execute in order; actions within a wave run in parallel
+- Errors in one action don't block unrelated actions in the same wave",8,High,Client,"published-app-viewer-c2,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement binding resolution and re-render,"As a user, I want widget properties bound to data to update when that data changes, so that the app feels alive and reactive, not static.
+
+Acceptance Criteria:
+- Only affected widgets re-render on a data change, not the whole tree
+- Verified against the performance target for canvas re-render latency",8,High,Client,"published-app-viewer-c2,Parallel-C0-C7"
+Story,,NG - Angular Client,"Port Table, Text, Button, Input and Select widgets","As a user, I want the five most commonly used widgets available in the new client, so that the majority of real applications can already be viewed.
+
+Acceptance Criteria:
+- Each has a passing visual-regression comparison against the React version
+- Property-pane config ported unchanged from the React widget's config directory",13,High,Client,"core-widget-set-c3,Parallel-C0-C7"
+Story,,NG - Angular Client,"Port Container, Form, List, Modal and Tabs widgets","As a user, I want the core layout and structural widgets available, so that applications with real structure, not just flat pages, render correctly.
+
+Acceptance Criteria:
+- Container/List nesting behaviour matches the React version
+- Modal and Tabs state behaviour verified against the corpus",13,High,Client,"core-widget-set-c3,Parallel-C0-C7"
+Story,,NG - Angular Client,Port Chart and JSON Form widgets,"As a user, I want data-visualisation and dynamic-form widgets available, so that applications using them for reporting or complex input work correctly.
+
+Acceptance Criteria:
+- Chart types supported match the current widget's documented set
+- JSON Form schema-driven rendering verified against a corpus sample",8,Medium,Client,"core-widget-set-c3,Parallel-C0-C7"
+Story,,NG - Angular Client,Port the property-pane config for every ported widget,"As a frontend developer, I want each widget's config/ directory (property pane schema, defaults, derived properties, autocomplete) carried over unchanged, so that the editing experience for these widgets matches today's without re-authoring the config.
+
+Acceptance Criteria:
+- Config files are copied, not re-derived from the rendering component
+- Derived properties (e.g. Table1.selectedRow) verified to compute correctly",8,High,Client,"core-widget-set-c3,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement canvas drag/drop/resize editing,"As a user, I want to add, move and resize widgets on the canvas, so that I can actually build an application, not just view one.
+
+Acceptance Criteria:
+- Geometry maths (topRow/leftColumn/grid units) ported exactly from the DSL semantics
+- Works with at least the fixedlayout and autolayout systems per the scope decision",13,High,Client,"editor-ide-c4,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the property pane framework,"As a user, I want a dynamic form that renders the correct controls for the selected widget's properties, so that I can configure any widget without the editor needing widget-specific UI code.
+
+Acceptance Criteria:
+- Driven entirely by the ported property-pane config, not hardcoded per widget
+- Reactive forms, typed, matching the target design's stated approach",13,High,Client,"editor-ide-c4,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the entity explorer,"As a user, I want a tree view of my application's pages, queries, JS objects and datasources, so that I can navigate my application's structure.
+
+Acceptance Criteria:
+- Reflects create/rename/delete in real time
+- Matches the current entity-explorer's grouping and iconography intent",8,High,Client,"editor-ide-c4,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the query editor and JS editor,"As a user, I want to write and test queries and JS Object functions in the editor, so that I can build my application's logic.
+
+Acceptance Criteria:
+- Query editor supports running a query and seeing the result inline
+- JS editor has at minimum syntax highlighting and inline error surfacing",13,High,Client,"editor-ide-c4,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the debugger panel,"As a user, I want to see evaluation errors and failed query executions in one place, so that I can diagnose a broken binding without guessing.
+
+Acceptance Criteria:
+- Surfaces evaluation errors from EvaluationService directly
+- Matches the diagnostic value of the current debugger, per Frontend Architecture §6",8,High,Client,"editor-ide-c4,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement undo/redo,"As a user, I want to undo and redo my canvas edits, so that I can recover from a mistake without starting over.
+
+Acceptance Criteria:
+- Ported from the ReplayDSL approach, not reimplemented from scratch
+- Works across widget add/move/resize/delete and property changes",5,Medium,Client,"editor-ide-c4,Parallel-C0-C7"
+Story,,NG - Angular Client,Port the remaining widget tail,"As a user, I want the widgets outside the core set to become available, in order of real usage frequency, so that applications that depend on less common widgets are eventually fully supported.
+
+Acceptance Criteria:
+- Priority order is driven by a scan of the real application corpus, not intuition
+- Each widget carries its own visual-regression check before being marked done",21,Medium,Client,"remaining-widgets-c5,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the git UI,"As a user, I want to connect, commit, push, branch and merge from the editor, so that I can use git version control without leaving the app.
+
+Acceptance Criteria:
+- Covers the same operations as the current Git panel
+- Status and merge-conflict UI clearly surfaces what the Git Service reports",13,Medium,Client,"peripheral-ui-c6,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the datasource UI,"As a user, I want connection forms per connector type, driven by the plugin catalog's form schema, so that I can create and configure any of the 25 datasource types.
+
+Acceptance Criteria:
+- Form renders dynamically from the schema, not hardcoded per connector
+- Test-connection button wired to the real endpoint",13,Medium,Client,"peripheral-ui-c6,Parallel-C0-C7"
+Story,,NG - Angular Client,"Implement workspace, settings and admin screens","As a user / administrator, I want to manage workspace members, roles and instance settings from the UI, so that I don't need direct API access to administer the platform.
+
+Acceptance Criteria:
+- Member/role management wired to the real Identity endpoints
+- Instance settings restricted to instance admins in the UI, matching the backend enforcement",8,Medium,Client,"peripheral-ui-c6,Parallel-C0-C7"
+Story,,NG - Angular Client,Implement the template gallery,"As a user, I want to browse and instantiate application templates, so that I can start from a working example instead of a blank canvas.
+
+Acceptance Criteria:
+- Matches current /app-templates browsing and import contracts",5,Low,Client,"peripheral-ui-c6,Parallel-C0-C7"
+Story,,NG - Angular Client,Port the Cypress/Playwright suites,"As a QA engineer, I want the existing E2E suites ported to run against the new Angular client, so that the acceptance gate for each phase is real, not assumed.
+
+Acceptance Criteria:
+- Suites run against the new client in CI, not just locally
+- A phase's slice of the suite is green before that phase is marked done, per the roadmap's definition of done",13,High,Client,"hardening-c7,Parallel-C0-C7"
+Story,,NG - Angular Client,Build the visual regression suite,"As a QA engineer, I want automated screenshot comparison between the React and Angular renderers across the application corpus, so that rendering differences are caught systematically, not by spot-checking.
+
+Acceptance Criteria:
+- Runs against every fixture in the corpus
+- Flags differences above a defined pixel-diff threshold for review",8,High,Client,"hardening-c7,Parallel-C0-C7"
+Story,,NG - Angular Client,Run the performance hardening pass,"As a frontend developer, I want the app measured and tuned against the stated FCP/TTI/re-render targets, so that the rewrite doesn't reproduce the current client's weight.
+
+Acceptance Criteria:
+- Each target in Angular Frontend §7 is measured and either met or has a documented gap and plan
+- Editor and viewer bundles both measured separately",8,Medium,Client,"hardening-c7,Parallel-C0-C7"
+Story,,NG - Angular Client,Run an accessibility audit,"As a user relying on assistive technology, I want the editor and viewer to meet a documented accessibility bar, so that the platform is usable by everyone, not just the happy-path user.
+
+Acceptance Criteria:
+- Automated audit (e.g. axe) integrated into CI
+- Manual keyboard-navigation pass completed for the core editing flow",5,Medium,Client,"hardening-c7,Parallel-C0-C7"
+Epic,MIG - Data Migration & Cutover,,Data Migration & Cutover,"Move MongoDB data into six PostgreSQL databases once, forward-only, verified at every stage, executed at cutover after repeated dry runs.",,,Migration,Pre-cutover
+Story,,MIG - Data Migration & Cutover,Scaffold the Appsmith.Migration console application,"As a backend developer, I want a standalone, checkpointed pipeline application, so that the migration can be run, re-run from scratch, or resumed reliably.
+
+Acceptance Criteria:
+- Each stage is independently checkpointed
+- Re-running from a clean target reproduces the same result",5,High,Migration,"migration-tooling,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement the id-map with deterministic UUIDs,"As a backend developer, I want every Mongo ObjectId mapped to a UUIDv5 derived from (namespace, collection, mongoId), so that repeated dry runs produce identical ids and are directly comparable.
+
+Acceptance Criteria:
+- Id map persisted and kept after migration for support lookups
+- Every subsequent stage resolves references exclusively through this table",5,High,Migration,"migration-tooling,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement the Tenant+Organization to Instance transform,"As a backend developer, I want the two legacy collections merged into one instances row with disagreements logged, so that the collapse decision (ADR / Domain Model §8) is executed correctly, not silently.
+
+Acceptance Criteria:
+- Every field disagreement between the two source documents is logged for review
+- No data is silently dropped without a logged reason",5,High,Migration,"identity-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,"Implement user, workspace and membership extraction and load","As a backend developer, I want users, workspaces, workspace_members, roles and role_assignments migrated from their Mongo collections, so that everyone's account and access exists correctly on day one of the new system.
+
+Acceptance Criteria:
+- Row counts match source document counts exactly, per workspace
+- Bcrypt hashes preserved as-is; migrated to Argon2id lazily on next login, not during migration",8,High,Migration,"identity-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement the policyMap to permission_grants inversion,"As a backend developer, I want every document's embedded policyMap inverted into rows in the authoritative grant table, so that the new system's authorization model starts with a complete, correct picture.
+
+Acceptance Criteria:
+- Streams and batch-COPYs rather than materialising in memory
+- Unknown permission strings fail the migration loudly, never silently skipped
+- Covers soft-deleted documents too, so restores remain correct",13,High,Migration,"permission-grants-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Verify authz_grants projection rebuild from the migrated grants,"As a tech lead, I want Application and Datasource Service's projection-rebuild endpoints run against the freshly migrated permission_grants table, so that the rebuild mechanism itself is validated as part of migration, not left untested until an incident.
+
+Acceptance Criteria:
+- Rebuilt projections match a sample of expected access decisions
+- This exercises the same code path that runs in production for projection recovery",8,High,Migration,"permission-grants-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement application/page/action/collection/theme extraction and load,"As a backend developer, I want the full editing-domain entity tree migrated with draft/published fields mapped to the new column model, so that every existing application opens correctly in the new system.
+
+Acceptance Criteria:
+- unpublishedX/publishedX pairs map correctly to draft_*/published_* columns per Database per Service §3
+- Applications never published end up with NULL published_* as designed, not an error",13,High,Migration,"application-data-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement the DSL unescape transform,"As a backend developer, I want Mongo's escaped '.' and '$' characters in DSL keys unescaped during migration, so that the new system never has to reproduce that escaping logic at all.
+
+Acceptance Criteria:
+- Every migrated draft_layout parses as valid, correctly-keyed JSON
+- The escape/unescape code path is confirmed absent from every service after migration",5,High,Migration,"application-data-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement the secrets decrypt-and-resplit job,"As a security engineer, I want a hardened, isolated job that decrypts existing datasource secrets and writes them into the secrets manager, so that every credential moves safely out of the database exactly once.
+
+Acceptance Criteria:
+- Job has no network egress except to the secrets manager
+- No secret value is logged at any point
+- Old encryption key is rotated out after the job completes",8,High,Migration,"secrets-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Migrate git deploy keys,"As a security engineer, I want existing SSH private keys moved into the secrets manager with only a reference kept in git_db, so that git operations keep working post-migration without keys ever sitting in plaintext in a database.
+
+Acceptance Criteria:
+- Every existing git-connected application's key is migrated and verified functional against its remote",5,High,Migration,"secrets-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement git repository/branch metadata extraction,"As a backend developer, I want git_repositories, git_branches and git_profiles populated from the source system, so that branch tracking and protection rules survive the migration.
+
+Acceptance Criteria:
+- Every existing (base_id, ref_name) pair migrates without collision
+- Duplicate pairs found in source data fail the migration loudly rather than silently picking one",5,Medium,Migration,"git-data-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Verify clean git status for every migrated repository,"As a tech lead, I want git status run against every migrated, git-connected application's working tree, so that the byte-stable-serialization guarantee is proven per-repository, not just on the golden test corpus.
+
+Acceptance Criteria:
+- A dirty tree for any repository blocks cutover for that application
+- Results logged per repository for the cutover go/no-go decision",5,High,Migration,"git-data-migration,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement row-count and referential-integrity verifiers,"As a backend developer, I want automated checks comparing source and target row counts and confirming zero orphaned foreign-key references, so that structural correctness is verified mechanically, not by spot-checking.
+
+Acceptance Criteria:
+- Runs as a migration stage, not a manual follow-up
+- Any failure aborts the run",5,High,Migration,"verification-&-dry-runs,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement the permission-fidelity sampling test,"As a security engineer, I want a sample of (user, resource, permission) triples evaluated against both the Java system and the new system, requiring a 100% match, so that the migration hasn't silently changed who can access what.
+
+Acceptance Criteria:
+- Sample size and selection method documented
+- Any mismatch blocks the migration — this is a go/no-go checkpoint",8,Highest,Migration,"verification-&-dry-runs,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Implement the application round-trip export diff verifier,"As a backend developer, I want every application exported from both systems, normalised and diffed, so that structural equality is proven per application, not assumed from aggregate checks.
+
+Acceptance Criteria:
+- Diff tool ignores expected differences (ids) and flags everything else
+- Report is reviewable per application, not just pass/fail overall",8,High,Migration,"verification-&-dry-runs,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Execute the three dry runs,"As a tech lead, I want a correctness dry run, a completeness dry run, and a timed rehearsal dry run, in that order, so that the real cutover has no surprises.
+
+Acceptance Criteria:
+- Dry run 1 fixes transformer bugs with no time pressure
+- Dry run 2 achieves all-green verification
+- Dry run 3 measures wall-clock duration and determines the acceptable freeze window",13,High,Migration,"verification-&-dry-runs,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Automate the cutover runbook,"As an operator, I want the freeze/snapshot/migrate/verify/switch sequence scripted, not run by hand from a checklist, so that cutover is repeatable and low-risk under pressure.
+
+Acceptance Criteria:
+- Every step in the runbook (Data Migration §9) has a corresponding automated action or explicit manual gate
+- Aborting mid-sequence leaves the system in a known, documented state",8,High,Migration,"cutover-execution,Pre-cutover"
+Story,,MIG - Data Migration & Cutover,Run a rollback drill,"As an operator, I want a rehearsal of switching the ingress back to the Java system, so that if cutover needs to be aborted, the team has actually done it before, not just planned it.
+
+Acceptance Criteria:
+- Drill executed against a non-production environment
+- Time-to-rollback measured and documented",5,Medium,Migration,"cutover-execution,Pre-cutover"

@@ -127,12 +127,4 @@ flowchart LR
 - `docs/architecture/00-prior-hld-critique.md` reviews the original `Master AppSmith HLD .docx` (an 8-service Node.js proposal). Its conclusions are folded into [Service Inventory §"Reconciling the original HLD"](02-target-architecture/01-service-inventory.md#reconciling-the-original-hld).
 - Source of truth for all current-state claims is this repository at branch `release/01SEP2026`. Paths are repo-relative from the repo root.
 
----
 
-## Visual landing page
-
-A rendered navigation hub — service inventory, golden-path navigator, the four load-bearing decisions, and reading paths — is published at:
-
-**https://claude.ai/code/artifact/ef82a351-9bdb-4ab1-b6d5-fc9645b239a1**
-
-It is private until shared. This `README.md` remains the canonical, cross-linked index; the artifact is the shareable overview.

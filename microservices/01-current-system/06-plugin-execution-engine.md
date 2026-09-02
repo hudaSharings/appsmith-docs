@@ -77,6 +77,8 @@ public interface PluginExecutor<C> extends ExtensionPoint, CrudTemplateService {
 
 `jsPlugin` is the odd one out and the dangerous one: it executes **arbitrary user-authored JavaScript** rather than a parameterised query. Every other connector at least confines itself to a protocol.
 
+> **Don't confuse the AI row above with the AI Assistant.** These four plugins are *datasources* — a user configures one per workspace and queries it like any other connector, through the same execution path as Postgres or REST. There is a second, entirely separate AI feature — an **editor copilot** that writes code for the user, configured once per instance by an admin, invoked from `POST /users/ai-assistant/request` rather than `/actions/execute` — that shares none of this plugin machinery. See [AI Assistant](11-ai-assistant.md).
+
 ## 4. Loading: PF4J, in-process
 
 ```mermaid
@@ -172,8 +174,8 @@ Beyond "run a query", the plugin layer serves three more UI-facing capabilities.
 
 ```mermaid
 flowchart LR
-    APP[Application Service] -->|gRPC ExecuteAction| ROUTER
-    DSS[Datasource Service] -->|gRPC TestConnection| ROUTER
+    APP[Application Service] -->|REST ExecuteAction| ROUTER
+    DSS[Datasource Service] -->|REST TestConnection| ROUTER
     DSS -.->|DatasourceConfigChanged event| CACHE
 
     subgraph EXEC["Query Execution Service"]

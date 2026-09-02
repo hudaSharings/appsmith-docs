@@ -120,9 +120,11 @@ Maps directly to FluentValidation or `System.ComponentModel.DataAnnotations` in 
 
 ## 10. Rate limiting
 
-`ratelimiting/` uses **bucket4j with a Redis backend** — currently applied narrowly (login attempts, some plugin trigger endpoints), not as a general API policy.
+`ratelimiting/` uses **bucket4j with a Redis backend** — currently applied narrowly: login attempts, some plugin trigger endpoints, and (per-user) the [AI Assistant](11-ai-assistant.md) request endpoint — not as a general API policy.
 
-Target: this belongs at the gateway as a first-class concern, with per-user, per-workspace and per-endpoint policies.
+The AI Assistant's limiter is worth citing as a pattern to keep: it **fails open** on a Redis outage (`onErrorReturn(true)`) rather than blocking the feature, matching the platform's general posture that a cache/lock outage degrades a capability rather than taking it down — and it's framed explicitly in the code as anti-"denial-of-wallet" protection, since every request there costs the organization real money at a third-party provider.
+
+Target: this belongs at the gateway as a first-class concern, with per-user, per-workspace and per-endpoint policies. See [Security & AuthZ](../02-target-architecture/06-security-and-authz.md) for how the AI Assistant's limiter specifically carries forward.
 
 ## 11. Security posture — current gaps worth naming
 

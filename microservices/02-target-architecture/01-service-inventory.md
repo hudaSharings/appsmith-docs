@@ -54,15 +54,15 @@
 
 | Aggregate | Tables |
 |---|---|
-| Instance | `instances` (collapses today's `Tenant` + `Organization` into one row) |
+| Instance | `instances` (collapses today's `Tenant` + `Organization` into one row) — **also holds the AI Assistant's instance-wide BYOK provider configuration**, matching today's `organizationConfiguration.aiAssistantConfig` (see [AI Assistant](../01-current-system/11-ai-assistant.md)) |
 | User | `users`, `user_profiles`, `user_preferences`, `password_reset_tokens`, `email_verification_tokens`, `external_logins` |
 | Workspace | `workspaces`, `workspace_members` |
 | Access control | `roles` (today's `PermissionGroup`), `role_assignments`, `permission_grants` |
 
 **Public contract**
-- gRPC (internal): `ValidateSession(token) → UserContext`, `GetUserPermissions(userId, workspaceId)`.
-- REST (via gateway): user/workspace/member/role CRUD, signup, login, invite, password reset.
-- **Publishes**: `UserSignedUp`, `UserDeactivated`, `WorkspaceCreated`, `WorkspaceDeleted`, `WorkspaceMemberAdded`, `WorkspaceMemberRemoved`, `RoleAssignmentChanged`, `PermissionGrantChanged`.
+- REST (internal): `POST /internal/v1/sessions/validate`, `GET /internal/v1/users/{id}/permissions`.
+- REST (via gateway): user/workspace/member/role CRUD, signup, login, invite, password reset, AI Assistant provider configuration (`/ai-config`, admin-only).
+- **Publishes**: `UserSignedUp`, `UserDeactivated`, `WorkspaceCreated`, `WorkspaceDeleted`, `WorkspaceMemberAdded`, `WorkspaceMemberRemoved`, `RoleAssignmentChanged`, `PermissionGrantChanged`, `AIAssistantConfigChanged`.
 
 **Why separate.** Security-critical, independently auditable, and every other service's authorization projection is fed from here. A bug in high-churn editing code must not be able to reach credential storage.
 
@@ -87,10 +87,10 @@
 | Projections | `authz_grants` (replica from IAM), `datasource_summaries` (replica from DS) |
 
 **Public contract**
-- REST (via gateway): the ~75 endpoints in [the catalog](../01-current-system/10-api-endpoint-catalog.md).
-- gRPC out: `Execution.ExecuteAction`, `Datasource.GetDatasourceConfigs`, `Git.Commit/Push/Pull`.
+- REST (via gateway): the ~75 endpoints in [the catalog](../01-current-system/10-api-endpoint-catalog.md), including `POST /users/ai-assistant/request`.
+- REST out: `POST execution/actions/execute`, `POST execution/assistant/generate`, `POST datasource/configs/batch`, `POST git/commit`, `POST git/push`, `POST git/pull`.
 - **Publishes**: `ApplicationCreated`, `ApplicationPublished`, `ApplicationDeleted`, `ApplicationForked`, `ApplicationAccessChanged`, `PageCreated/Deleted`.
-- **Consumes**: IAM permission events, `DatasourceCreated/Updated/Deleted`.
+- **Consumes**: IAM permission events, `DatasourceCreated/Updated/Deleted`, `AIAssistantConfigChanged`.
 
 **Why one service and not four.** This is decision D1 and it is the most important one in the design:
 
@@ -100,6 +100,8 @@
 - Fork/import remap ids across every entity type. Inside one service that's a local transaction plus one compensating call to Datasource Service; split up it's a five-participant saga.
 
 **Why it holds binding analysis.** Saving a layout requires parsing `{{ }}` expressions to compute the on-load plan. Today the Java server delegates this to RTS over HTTP because it can't parse JS. In .NET this becomes an in-process concern of Application Service using a JS parser (Esprima.NET / Jint / a small AST sidecar). It is domain logic, not glue — it decides query execution order.
+
+**Why it orchestrates the AI Assistant.** Today's `AIAssistantServiceCEImpl` already needs action/application edit-permission checks and a datasource-schema fetch before it can call an LLM provider — the same authorization and schema-lookup responsibilities Application Service holds for every other flow. It stays the orchestrator; only the actual provider call moves to Query Execution's `Workers.Ai` pool (§4), which already exists for the AI *connector* plugins. See [AI Assistant](../01-current-system/11-ai-assistant.md) and [ADR-011](../03-execution/04-risks-and-adrs.md).
 
 **Explicitly *not* its own service:** import/export/fork orchestration, template instantiation, CRUD-page generation, snapshots. All internal workflows of this service. They touch many entities but have no independent scaling need and no separate team boundary.
 
@@ -124,7 +126,7 @@ Secrets are **references** (`secret_ref` pointing at the secrets manager), not c
 
 **Public contract**
 - REST (via gateway): datasource CRUD, storage updates, mock catalog, OAuth callbacks.
-- gRPC out: `Execution.TestConnection`, `Execution.GetStructure`.
+- REST out: `POST execution/datasources/test-connection`, `POST execution/datasources/structure`.
 - **Publishes**: `DatasourceCreated`, `DatasourceConfigChanged`, `DatasourceDeleted`.
 - **Consumes**: `PluginCatalogUpdated` from Execution, permission events from IAM.
 
@@ -149,25 +151,29 @@ Secrets are **references** (`secret_ref` pointing at the secrets manager), not c
 | Execution audit | `execution_audit` (duration, bytes, status, error class, connector) |
 | Local read cache of datasource config | Event-replicated, in-memory + Redis |
 | Connection pools | Per worker pool, per `(datasourceId, environmentId)` |
+| Local read cache of AI provider config | Event-replicated from Identity & Access's `AIAssistantConfigChanged`, resolved just-in-time from the secrets manager per request — never held longer than the call |
 
 **Public contract**
-- gRPC in: `ExecuteAction(actionId, config, params, context) → ActionExecutionResult`, `TestConnection`, `GetStructure`, `Trigger`.
+- REST in: `POST /internal/v1/execution/actions/execute`, `.../datasources/test-connection`, `.../datasources/structure`, `.../datasources/trigger`, `.../assistant/generate`.
 - **Publishes**: `PluginCatalogUpdated`, `ExecutionFailed` (for alerting).
-- **Consumes**: `DatasourceConfigChanged`, `DatasourceDeleted`.
+- **Consumes**: `DatasourceConfigChanged`, `DatasourceDeleted`, `AIAssistantConfigChanged`.
 
 **Architecture — this is not one process.**
 
 ```
-Appsmith.Execution.Api          thin stateless gRPC router
+Appsmith.Execution.Api          thin stateless REST router
   ├─ Workers.Sql                pooled: postgres, mysql, mssql, oracle, redshift, snowflake, databricks
   ├─ Workers.NoSql              pooled: mongo, arango, dynamo, firestore, elastic, redis
   ├─ Workers.Http               pooled: rest, graphql, saas
   ├─ Workers.Cloud              pooled: s3, sheets, lambda, smtp
-  ├─ Workers.Ai                 pooled: openai, anthropic, googleai, appsmith-ai
+  ├─ Workers.Ai                 pooled: openai, anthropic, googleai, appsmith-ai connectors —
+  │                              AND the AI Assistant's provider dispatch (Claude/OpenAI/Azure/Local LLM)
   └─ Workers.Js                 ⚠ short-lived, ONE PER EXECUTION, torn down after
 ```
 
 Each worker pool is a separately deployable container with **CPU, memory and wall-clock limits**. The JS worker is not pooled at all — it executes arbitrary user code, so state must not survive between executions.
+
+**`Workers.Ai` carries two distinct callers on purpose.** The AI *connector* plugins (a user's datasource, invoked via `ExecuteAction`) and the AI Assistant (an editor copilot, invoked via `GenerateAssistantResponse`) hit different providers in practice today (OpenAI/Anthropic/Google AI for the former; Claude/OpenAI/Azure OpenAI/Local LLM for the latter) but share the identical risk profile this pool exists to contain: unbounded-latency calls to a third-party HTTP API, real per-request cost, and the same HTTPS-only, no-loopback egress policy `RestrictedHostFilter` already enforces for both paths today. One pool, two entry points, not two pools.
 
 **Why separate deployable.** It is the only place untrusted third-party and user code runs. It is the only component whose latency is bounded by systems we don't control. And it is the only one that benefits from scaling per connector family.
 
@@ -194,7 +200,7 @@ Each worker pool is a separately deployable container with **CPU, memory and wal
 Plus a **working-tree volume** (PVC/EFS) and the existing **Redis lock keyed on `baseArtifactId`**.
 
 **Public contract**
-- REST/gRPC in: `Commit(repoId, branch, artifactJson, message)`, `Push`, `Pull → artifactJson`, `ListBranches`, `CreateBranch`, `Merge`, `Status`, `Discard`.
+- REST in: `POST /internal/v1/git/commit`, `.../push`, `.../pull → artifactJson`, `GET .../branches`, `POST .../branches`, `.../merge`, `GET .../status`, `POST .../discard`.
 - **Publishes**: `CommitCreated`, `BranchCreated`, `AutoCommitCompleted`.
 
 **Why separate.** It already *is* the cleanest module in the Java codebase (`appsmith-git` has zero dependencies back into the server). It has a genuinely different resource profile — disk I/O, SSH, CPU-bound diff/merge — and a genuinely different failure vocabulary (auth failures, merge conflicts, network SSH). Its concurrency mechanism (Redis lock per artifact) already exists and works.
@@ -279,14 +285,14 @@ flowchart TB
 
     NG -->|REST| GW
     NG -.->|WebSocket| RT
-    GW -->|gRPC ValidateSession| IAM
+    GW -->|REST ValidateSession| IAM
     GW --> APP
     GW --> DS
-    APP -->|gRPC ExecuteAction| EX
-    APP -->|gRPC GetDatasourceConfigs| DS
+    APP -->|REST ExecuteAction| EX
+    APP -->|REST GetDatasourceConfigs| DS
     APP -->|REST Commit/Push/Pull| GIT
-    DS -->|gRPC TestConnection| EX
-    RT -->|gRPC auth| IAM
+    DS -->|REST TestConnection| EX
+    RT -->|REST auth| IAM
 
     IAM -.->|permission events| BR
     DS -.->|config changed| BR

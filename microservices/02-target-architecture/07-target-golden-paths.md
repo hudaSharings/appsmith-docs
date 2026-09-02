@@ -15,11 +15,12 @@ The same flows as [Current Golden Paths](../01-current-system/05-golden-paths.md
 | Create application | One service | One service (Application) | Unchanged |
 | Editor boot | In-process fan-out | **Gateway fan-out** across 3 services | Same shape, network hops added |
 | Save layout | In-process + HTTP to RTS | **Fully in-process** (Application) | **Simpler** — one fewer hop |
-| Run a query | In-process | **Application → Execution (gRPC) → isolated worker** | Hop added, isolation gained |
+| Run a query | In-process | **Application → Execution (REST) → isolated worker** | Hop added, isolation gained |
 | Publish | 5 unguarded writes | **1 database transaction** | **Strictly better** |
 | Fork / Import | In-process, no rollback | **Saga with compensation** | More machinery, actually correct |
-| Git commit | In-process | **Application → Git (gRPC)** | Hop added, clean boundary |
+| Git commit | In-process | **Application → Git (REST)** | Hop added, clean boundary |
 | Workspace delete | In-process cascade | **Saga across 4 services** | The genuinely hard new flow |
+| Ask AI | In-process call to the provider | **Application → Execution's `Workers.Ai` pool** | Hop added, same isolation the AI connector plugins already get |
 
 ---
 
@@ -37,7 +38,7 @@ sequenceDiagram
     participant NT as Notifications
 
     B->>GW: POST /api/v1/login {email, password} + CSRF
-    GW->>IAM: Authenticate (gRPC)
+    GW->>IAM: Authenticate (REST)
     IAM->>PG: SELECT user by (instance_id, email)
     IAM->>IAM: verify Argon2id, check enabled + verified
     IAM->>PG: SELECT role_ids for user
@@ -63,7 +64,7 @@ sequenceDiagram
     participant BR as RabbitMQ
 
     B->>GW: POST /api/v1/workspaces {name}
-    GW->>IAM: CreateWorkspace (gRPC, user context)
+    GW->>IAM: CreateWorkspace (REST, user context)
     rect rgba(200,240,200,0.25)
     note over IAM,PG: ONE local transaction
     IAM->>PG: INSERT workspaces
@@ -160,7 +161,7 @@ sequenceDiagram
     GW->>APP: ExecuteAction (user context)
     APP->>PG: SELECT action JOIN authz_grants (execute or manage, by viewMode)
     APP->>APP: substitute {{ params }} into the action config
-    APP->>EXR: ExecuteAction (gRPC, deadline)
+    APP->>EXR: POST execution/actions/execute (REST, timeout)
     EXR->>CACHE: datasource config for (datasourceId, environmentId)
     alt cache stale vs the caller's expected version
         EXR->>EXR: synchronous refetch from Datasource Service
@@ -240,7 +241,7 @@ sequenceDiagram
     APP->>PG: INSERT application, pages, actions, collections, themes<br/>with fresh ids and a remap table
     end
 
-    APP->>DS: CloneDatasources(sourceIds[], targetWorkspaceId) (gRPC)
+    APP->>DS: POST datasource/clone (sourceIds[], targetWorkspaceId) (REST)
     alt clone succeeded
         DS-->>APP: {oldId → newId}
         rect rgba(200,240,200,0.25)
@@ -280,7 +281,7 @@ sequenceDiagram
     B->>GW: POST /api/v1/git/commit/app/{id} {message, doPush}
     GW->>APP: CommitArtifact
     APP->>APP: serialise app + pages + actions + collections + theme + JS libs
-    APP->>DS: GetDatasourceConfigs (gRPC) — secrets stripped
+    APP->>DS: POST datasource/configs/batch (REST) — secrets stripped
     DS-->>APP: configs
     APP->>GIT: Commit(artifactId, refName, artifactJson, message, author, doPush)
     GIT->>R: acquire lock on artifactId (lease, retry+backoff)
@@ -371,9 +372,52 @@ sequenceDiagram
 
 The distinction matters: **changing who holds a role takes effect on the user's next request** (via the role-set cache). Only changing *what a role can do* goes through the eventually-consistent projection. Hard revocations (`WorkspaceMemberRemoved`, `UserDeactivated`) additionally kill the user's sessions at the gateway. Detail: [Security & AuthZ §3](06-security-and-authz.md#3-the-eventual-consistency-window--and-how-its-contained).
 
+## 11. Ask AI in the editor
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Angular SPA (AskAIButton, shared CodeEditor)
+    participant GW as API Gateway
+    participant APP as Application Service
+    participant PG as application_db
+    participant EXR as Execution router
+    participant CACHE as ai_provider_config_cache
+    participant SM as Secrets Manager
+    participant W as Workers.Ai (shared with the AI connector plugins)
+    participant LLM as Claude / OpenAI / Azure / Local LLM
+
+    B->>GW: POST /api/v1/users/ai-assistant/request
+    GW->>APP: GenerateAssistantResponse request (user context, rate-limit key)
+    APP->>APP: per-user rate check — fails OPEN on a limiter outage
+    APP->>PG: SELECT action JOIN authz_grants (edit — a hard denial, not a fallback)
+    APP->>PG: fetch datasource schema if entity_id is a DB action, budget-capped
+    APP->>EXR: POST execution/assistant/generate (provider, prompt, context, history) (REST)
+    EXR->>CACHE: instance AI provider config (event-replicated from Identity)
+    alt AI Assistant disabled at the instance
+        EXR-->>APP: refused — "AI Assistant is disabled"
+    end
+    EXR->>SM: resolve provider credential just-in-time
+    EXR->>W: dispatch (180s timeout, HTTPS-only egress, no loopback)
+    W->>LLM: provider call
+    LLM-->>W: generated code
+    W-->>EXR: AssistantResponse
+    EXR-->>APP: response
+    APP-->>GW: response
+    GW-->>B: {response, provider}
+```
+
+Changes worth noting:
+- **Authorization moves to Application Service but keeps the exact same rule**: edit rights on the entity being worked on, checked as a hard denial rather than degrading gracefully — the one place in this flow that must *not* fail open.
+- **Dispatch reuses `Workers.Ai`**, the same isolated worker pool already designed for the `openai`/`anthropic`/`googleai` connector plugins ([Service Inventory §4](01-service-inventory.md)) — one more network hop than today's in-process call, in exchange for the same process isolation, timeout enforcement and egress policy every other third-party call gets.
+- **Config resolution is a local cache read**, not a call back to Identity & Access — mirrors `datasource_config_cache` exactly, for the same reason: don't add a network hop to a path that's already paying for one third-party call.
+- **The credential never reaches Application Service or the Execution router's own memory beyond the call** — resolved by the worker, just-in-time, matching the connector-worker secrets model in [Security & AuthZ §4](06-security-and-authz.md#4-secrets).
+
+Full current-system behaviour this preserves: [AI Assistant](../01-current-system/11-ai-assistant.md). Design rationale for keeping this out of a dedicated service: [ADR-011](../03-execution/04-risks-and-adrs.md).
+
 ---
 
-## 11. Saga inventory
+## 12. Saga inventory
 
 Exactly three. Anything not on this list must not be built as a saga.
 

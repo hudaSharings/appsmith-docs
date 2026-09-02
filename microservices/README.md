@@ -18,6 +18,7 @@
 | **Doing the Angular rewrite** | [Frontend Architecture (current)](01-current-system/08-frontend-architecture.md) → [Angular Target](02-target-architecture/08-angular-frontend.md) |
 | **Planning / sequencing the work** | [Decomposition Strategy](03-execution/01-decomposition-strategy.md) → [Roadmap](03-execution/02-roadmap-and-sequencing.md) → [Risks & ADRs](03-execution/04-risks-and-adrs.md) |
 | **A Scrum Master tracking this in JIRA** | [JIRA Setup Guide](04-delivery-tracking/00-jira-setup-guide.md) → [Epics, Features & User Stories](04-delivery-tracking/01-epics-features-stories.md) → [`02-jira-import.csv`](04-delivery-tracking/02-jira-import.csv) |
+| **Staffing a large team in parallel** | [Parallel Delivery & Dependency Management](04-delivery-tracking/03-parallel-delivery-and-dependencies.md) — which of the 263 stories are assignable day one, which need a contract frozen first, and which are genuinely sequenced |
 
 ---
 
@@ -36,12 +37,13 @@
 | [02 Runtime Topology](01-current-system/02-runtime-topology.md) | What actually runs at runtime: one container, four processes, supervisord, Mongo/Redis/Postgres roles |
 | [03 Domain Model & Database](01-current-system/03-domain-model-and-db.md) | Every collection, ERDs, the draft/published duplication, git branch modelling, why there are no joins |
 | [04 Permissions & ACL](01-current-system/04-permissions-and-acl.md) | The `policyMap` model, permission groups, the policy graph, why this is the hardest thing to split |
-| [05 Golden Paths](01-current-system/05-golden-paths.md) | 13 end-to-end flows with sequence diagrams, traced to source files |
+| [05 Golden Paths](01-current-system/05-golden-paths.md) | 14 end-to-end flows with sequence diagrams, traced to source files |
 | [06 Plugin & Execution Engine](01-current-system/06-plugin-execution-engine.md) | The 25 connectors, PF4J, connection pooling, datasource storage/environments, secret encryption |
 | [07 Git Versioning](01-current-system/07-git-versioning.md) | How an app becomes files, branch-per-entity-copy, JGit, the Redis lock |
 | [08 Frontend Architecture](01-current-system/08-frontend-architecture.md) | React/Redux-Saga, the DSL, the evaluation web worker, 82 widgets — and what of it is server contract vs. UI |
 | [09 Cross-Cutting Concerns](01-current-system/09-cross-cutting-concerns.md) | Config, feature flags, caching, migrations, analytics, email, scheduled jobs, observability |
 | [10 API Endpoint Catalog](01-current-system/10-api-endpoint-catalog.md) | Every `/api/v1` endpoint mapped to its future owning service |
+| [11 AI Assistant](01-current-system/11-ai-assistant.md) | The editor copilot — BYOK provider config, request flow, secret handling, denial-of-wallet protection. Distinct from the AI connector plugins in doc 06 |
 
 ### 02 — Target architecture (.NET 10)
 | Doc | What it answers |
@@ -50,9 +52,9 @@
 | [02 Target Topology](02-target-architecture/02-target-topology.md) | C4 context/container diagrams, gateway design, sync vs async, deployment shape |
 | [03 Database per Service](02-target-architecture/03-database-per-service.md) | Postgres schema per service with DDL, Mongo→Postgres mapping rules, JSONB policy, outbox, Redis usage |
 | [04 .NET 10 Standards](02-target-architecture/04-dotnet-10-standards.md) | The opinionated stack: solution layout, Minimal APIs, EF Core, MassTransit, Aspire, testing, conventions |
-| [05 Service Contracts & Events](02-target-architecture/05-service-contracts-and-events.md) | gRPC contracts, the integration-event catalog, versioning rules |
+| [05 Service Contracts & Events](02-target-architecture/05-service-contracts-and-events.md) | REST endpoint contracts, the integration-event catalog, versioning rules |
 | [06 Security & AuthZ](02-target-architecture/06-security-and-authz.md) | Session model at the edge, authorization projections, secrets, plugin sandboxing |
-| [07 Target Golden Paths](02-target-architecture/07-target-golden-paths.md) | The same 13 flows, redrawn across services, with the sagas called out |
+| [07 Target Golden Paths](02-target-architecture/07-target-golden-paths.md) | The same 14 flows, redrawn across services, with the sagas called out |
 | [08 Angular Frontend](02-target-architecture/08-angular-frontend.md) | What to port, what to rewrite, what not to touch; the honest sizing of the canvas problem |
 
 ### 03 — Executing the migration
@@ -66,9 +68,10 @@
 ### 04 — Delivery tracking
 | Doc | What it answers |
 |---|---|
-| [00 JIRA Setup Guide](04-delivery-tracking/00-jira-setup-guide.md) | How to load the backlog into JIRA: issue hierarchy, components, labels, story points, workflow, Sprint 0 checklist |
-| [01 Epics, Features & User Stories](04-delivery-tracking/01-epics-features-stories.md) | Every service as an Epic, broken into Features and 217 JIRA-ready user stories with acceptance criteria and estimates |
-| [02 jira-import.csv](04-delivery-tracking/02-jira-import.csv) | The same backlog as a CSV, ready for JIRA's CSV importer |
+| [00 JIRA Setup Guide](04-delivery-tracking/00-jira-setup-guide.md) | How to load the backlog into JIRA: issue hierarchy, components, labels, story points, Kanban board workflow |
+| [01 Epics, Features & User Stories](04-delivery-tracking/01-epics-features-stories.md) | Every service as an Epic, broken into Features and 263 JIRA-ready user stories (including 26 contract-stub stories) with acceptance criteria, estimates and delivery tiers |
+| [02 jira-import.csv](04-delivery-tracking/02-jira-import.csv) | The same backlog as a CSV, ready for JIRA's CSV importer, with a `Tier` column |
+| [03 Parallel Delivery & Dependency Management](04-delivery-tracking/03-parallel-delivery-and-dependencies.md) | The Tier model: which features a large team can start immediately, which need one contract frozen first, and which are genuinely sequenced |
 
 ### 99 — Reference
 | Doc | What it answers |
@@ -79,7 +82,7 @@
 
 ## The one-paragraph version
 
-Appsmith is a low-code platform: users drag widgets onto a canvas, connect them to datasources, write queries and JS, and publish an internal tool. Today that is a **Spring WebFlux reactive Java monolith (~163k LOC)** over **MongoDB**, plus a separate Node.js "RTS" process and a **React SPA (~708k LOC)**, all packed into **one Docker container** by supervisord. We are replacing it with **8 deployables on .NET 10** — an API Gateway/BFF plus 7 domain services — each owning its own **PostgreSQL** database, communicating synchronously over gRPC where a user is waiting and asynchronously over RabbitMQ everywhere else, with **Redis** for locks, sessions, and the SignalR backplane, fronted by a new **Angular** client.
+Appsmith is a low-code platform: users drag widgets onto a canvas, connect them to datasources, write queries and JS, and publish an internal tool. Today that is a **Spring WebFlux reactive Java monolith (~163k LOC)** over **MongoDB**, plus a separate Node.js "RTS" process and a **React SPA (~708k LOC)**, all packed into **one Docker container** by supervisord. We are replacing it with **8 deployables on .NET 10** — an API Gateway/BFF plus 7 domain services — each owning its own **PostgreSQL** database, communicating synchronously over REST where a user is waiting and asynchronously over RabbitMQ everywhere else, with **Redis** for locks, sessions, and the SignalR backplane, fronted by a new **Angular** client.
 
 ```mermaid
 flowchart LR

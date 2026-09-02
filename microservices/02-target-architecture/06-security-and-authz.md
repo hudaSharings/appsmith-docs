@@ -35,12 +35,12 @@ sequenceDiagram
     alt session cached
         R-->>GW: UserContext
     else expired / miss
-        GW->>IAM: ValidateSession (gRPC)
+        GW->>IAM: POST /internal/v1/sessions/validate (REST)
         IAM-->>GW: UserContext
         GW->>R: re-cache
     end
     GW->>GW: mint internal JWT (60s TTL): sub, instance, roleIds[], correlationId
-    GW->>SVC: gRPC/HTTP + Authorization: Bearer <internal JWT>
+    GW->>SVC: HTTPS + Authorization: Bearer <internal JWT>
     SVC->>SVC: validate signature, populate IUserContext
 ```
 
@@ -162,6 +162,7 @@ For comparison, today's system has a Redis `permissionGroupsForUser` cache with 
 | OAuth client secrets | Env / Mongo | Secrets manager |
 | User passwords | bcrypt in Mongo | **Argon2id** in `identity_db` (an upgrade; bcrypt hashes are migrated lazily on next login) |
 | Signing keys (internal JWT) | n/a | Secrets manager, rotated |
+| AI Assistant provider keys (BYOK: Claude/OpenAI/Azure) | A hand-rolled `enc:v1:`-marked scheme (`AIConfigSecretsCE`), not the framework's `@Encrypted` — see [AI Assistant §2](../01-current-system/11-ai-assistant.md#2-configuration-instance-wide-admin-only-byok) | `ai_assistant_secret_ref` in `instances` → secrets manager |
 
 Behind one abstraction so the provider is a deployment choice:
 
@@ -175,6 +176,12 @@ public interface ISecretStore
 ```
 
 Implementations: HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, and a **Postgres-backed envelope-encryption implementation for the self-hosted single-node profile** (so the lean docker-compose deployment doesn't require an extra dependency).
+
+**Two behaviours the current system hand-rolls per-feature should become properties of `ISecretStore` itself**, not something every consumer reimplements — the AI Assistant's `AIConfigSecretsCE` is the source for both:
+1. **A stored credential is bound to the destination it was entered for.** If a config write changes the associated URL/endpoint without also supplying a fresh credential, the store invalidates the old one rather than silently sending it to a new destination — otherwise an admin who can *manage* a config but not *read back* a masked key could redirect where it's sent.
+2. **A test/verify call and the real dispatch call are held to the same destination policy.** There should be no "test connection" path that's laxer than the path that actually uses the stored credential.
+
+Both apply beyond the AI Assistant — Datasource Service's credential handling should get the same guarantees.
 
 ### Who can resolve a secret
 
@@ -202,7 +209,7 @@ The largest security improvement in the programme. Today: 25 connectors, in-proc
 |---|---|
 | **Process isolation** | Connector workers are separate containers, not `AssemblyLoadContext` |
 | **CPU / memory limits** | Container-level (cgroups). A runaway connector is throttled or OOM-killed without touching anything else |
-| **Wall-clock timeout** | Enforced by the router *and* the worker. Deadline propagated from the gRPC call |
+| **Wall-clock timeout** | Enforced by the router *and* the worker. Deadline set explicitly by the router's `HttpClient` timeout on every dispatch call — REST has no automatic deadline propagation, so this is configured per call rather than inherited |
 | **Network egress policy** | Workers may reach customer systems; **workers may not reach internal services or the secrets manager**. Enforced with network policies |
 | **No filesystem persistence** | Workers run read-only rootfs with a tmpfs scratch |
 | **JS worker is per-execution** | Arbitrary user code gets a fresh, short-lived worker, torn down after each call. No state survives between users |
@@ -216,6 +223,16 @@ Users legitimately configure arbitrary URLs — that is the product. So the cont
 - A configurable deny-list for link-local, loopback and private ranges (default-on for cloud deployments, default-off for self-hosted where reaching internal systems *is* the use case).
 - DNS re-resolution before connect, to defeat rebinding.
 - Egress from the worker network segment only, so an SSRF cannot reach the platform's own services.
+
+**This isn't a green-field recommendation — it already exists today**, as `RestrictedHostFilter` (`app/server/appsmith-server/.../util/RestrictedHostFilter.java`), wired into the shared `WebClientUtils` every REST/GraphQL/SaaS-based connector uses, plus the Elasticsearch plugin's HTTP client and the Redis plugin's connection setup. Notably, it's **also** what the AI Assistant's outbound provider calls go through today — the same filter that stops a datasource from reaching `http://localhost` stops a BYOK provider endpoint from being pointed there too. Port the mechanism, don't redesign it; the target's per-worker network policy is the containerized equivalent of the same idea.
+
+### Rate limiting as a cost control, not just an abuse control
+
+Most rate limiting exists to protect the platform from a caller. The AI Assistant's limiter exists to protect the **organization's wallet** from a caller — every request costs real money at a third-party provider, and the endpoint is reachable by any authenticated member. Two properties of that limiter are worth carrying forward as a named pattern, not just for AI:
+- **Keyed per user**, so one caller's loop can't exhaust the whole organization's allowance.
+- **Fails open on a limiter outage.** A Redis blip degrading the rate limit is an acceptable, bounded risk; a Redis blip taking down the feature entirely is not. This matches the platform's general posture elsewhere (git locks, permission-group caching) that infrastructure flakiness degrades a capability rather than removing it.
+
+Apply the same shape anywhere a request triggers real external cost: the AI Assistant today, and any future feature with the same profile.
 
 ---
 

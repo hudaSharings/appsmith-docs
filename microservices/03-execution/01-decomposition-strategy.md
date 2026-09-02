@@ -199,7 +199,7 @@ The service boundaries are also ownership boundaries. Suggested allocation once 
 | **Porting `Mono` chains into Rx.NET** | Mechanical translation feels safer | Write idiomatic `async`/`await`. Read the Java for *intent*, not structure |
 | **Rewriting the evaluation engine** | "It's client code, we're rewriting the client" | It is framework-independent TypeScript with years of correctness work. Port it |
 | **Making Publish a saga** | It touches five entity types | They are all in one database. It is one transaction |
-| **A shared "common" database or schema** | Cross-service data needs feel easier that way | Projections and gRPC. There is no escape hatch |
+| **A shared "common" database or schema** | Cross-service data needs feel easier that way | Projections and REST calls. There is no escape hatch |
 | **Sagas for everything** | The framework is there | Exactly three sagas exist ([Target Golden Paths §11](../02-target-architecture/07-target-golden-paths.md#11-saga-inventory)) |
 | **`AssemblyLoadContext` for connector isolation** | It's the closest .NET analogue to PF4J | It reproduces the current problem. Only processes give enforceable limits |
 | **Changing the DSL during the rewrite** | Its warts are visible | Two risky projects at once. Change the framework, keep the data |

@@ -33,7 +33,7 @@ Base paths come from `constants/ce/UrlCE.java`. All routes are prefixed `/api/v1
 | PUT | `/users/setReleaseNotesViewed` | UI state | IAM |
 | PUT | `/users/applications/{applicationId}/favorite` | Toggle favourite | IAM (userData) |
 | GET | `/users/favoriteApplications` | Favourites list | IAM |
-| POST | `/users/ai-assistant/request` | AI assistant request | APP |
+| POST | `/users/ai-assistant/request` | AI assistant request — entity-authorized, rate-limited ([detail](11-ai-assistant.md)) | APP → EXEC |
 
 ## Workspaces — `/workspaces`
 
@@ -53,7 +53,7 @@ Base paths come from `constants/ce/UrlCE.java`. All routes are prefixed `/api/v1
 |---|---|---|---|
 | GET | `/tenants/current` | Instance configuration (branding, auth methods) | IAM |
 | PUT | `/tenants` | Update instance config | IAM |
-| GET/PUT | `/tenants/ai-config` | AI provider configuration | APP |
+| GET/PUT | `/tenants/ai-config` | AI Assistant provider configuration — instance-wide, admin-only, BYOK ([detail](11-ai-assistant.md)) | IAM |
 | POST | `/tenants/ai-config/test-connection`, `/fetch-models`, `/test-api-key` | AI provider probes | EXEC |
 
 > `Tenant` and `Organization` are two near-duplicate collections mid-migration. The target collapses them into a single `Instance` row owned by IAM. **Keep the `/tenants` route shape at the gateway** so the client doesn't churn, or rename deliberately as part of the client rewrite.
@@ -117,7 +117,7 @@ Base paths come from `constants/ce/UrlCE.java`. All routes are prefixed `/api/v1
 | DELETE | `/actions/{id}` | Delete | APP |
 | PUT | `/actions/move`, `/actions/refactor` | Move between pages / rename | APP |
 | PUT | `/actions/executeOnLoad/{id}`, `/actions/runBehaviour/{id}` | On-load flags | APP |
-| **POST** | **`/actions/execute`** | **Run a query (multipart)** | **APP → EXEC (gRPC)** |
+| **POST** | **`/actions/execute`** | **Run a query (multipart)** | **APP → EXEC (REST)** |
 | GET/PATCH/DELETE | `/collections/actions*` | JS objects (ActionCollection) | APP |
 | PUT | `/collections/actions/{id}/body`, `/refactorAction`, `/move`, `/refactor` | JS object edits | APP |
 

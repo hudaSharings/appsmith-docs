@@ -61,6 +61,8 @@ export class EvaluationService {
 
 Widget rendering, the editor IDE, layout rendering, the design system. This is real work, but it is *ordinary* work: known inputs (the DSL), known outputs (rendered DOM), and a reference implementation to compare against.
 
+**The AI Assistant's client surfaces belong in this bucket, not the "port as-is" one** — easy to overlook because they're small individually, but real: an "Ask AI" button embedded in the *shared* code-editor component (so it's reachable from every query editor, JS editor and binding field, not a standalone panel), a dedicated AI tab inside the Custom Widget Builder, and an instance-admin settings screen for the BYOK provider configuration. None of it is framework-independent the way the evaluation engine is — it's ordinary React UI wired to a Redux slice, all of which gets rewritten against the target contract in [AI Assistant](../01-current-system/11-ai-assistant.md#3-the-request-flow). Sequence it alongside the shared code-editor component in Stage C4 (§5) — it has no reason to land earlier, since it depends on the editor shell existing first.
+
 ### Replace — roughly 12% of the code
 
 Redux + 77 sagas become Angular services with signals. **Do not port saga-by-saga.** Sagas exist to sequence async side effects in a Redux world; Angular services with `async`/`await` and signals express the same intent in a fraction of the code. Porting them one-to-one would import an architecture that doesn't belong.

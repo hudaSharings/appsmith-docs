@@ -4,7 +4,7 @@
 
 ---
 
-Thirteen end-to-end flows, traced to source. These are the flows you must be able to reproduce; they are the acceptance criteria for the re-architecture. The target-side versions of the same flows are in [Target Golden Paths](../02-target-architecture/07-target-golden-paths.md).
+Fourteen end-to-end flows, traced to source. These are the flows you must be able to reproduce; they are the acceptance criteria for the re-architecture. The target-side versions of the same flows are in [Target Golden Paths](../02-target-architecture/07-target-golden-paths.md).
 
 | # | Flow | Primary source |
 |---|---|---|
@@ -21,6 +21,7 @@ Thirteen end-to-end flows, traced to source. These are the flows you must be abl
 | [11](#11-git-connect-commit-push) | Git connect / commit / push | `git/common/CommonGitServiceCEImpl.java`, `appsmith-git` |
 | [12](#12-invite-a-user-to-a-workspace) | Invite a user | `solutions/ce/UserAndAccessManagementServiceCEImpl.java` |
 | [13](#13-fork--import--export-an-application) | Fork / import / export | `fork/`, `imports/`, `exports/` |
+| [14](#14-ask-ai-in-the-editor) | Ask AI in the editor | `services/ce/AIAssistantServiceCEImpl.java` — [full detail](11-ai-assistant.md) |
 
 ---
 
@@ -508,6 +509,37 @@ Notes:
 - Every entity type implements a paired `*ExportableService` / `*ImportableService`. The id-remapping table is the fiddly part and where most import bugs live.
 - No transaction. A failed import leaves orphans.
 
+## 14. Ask AI in the editor
+
+`POST /api/v1/users/ai-assistant/request` — a fundamentally different shape from the other thirteen flows: it's an authenticated user action that costs the *organization* real money at a third-party provider, not a CRUD operation on Appsmith's own data. Full detail, including the secret-handling and SSRF-protection subtleties: [AI Assistant](11-ai-assistant.md).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser (AskAIButton, in the shared CodeEditor)
+    participant UC as UserControllerCE
+    participant AAS as AIAssistantServiceCEImpl
+    participant RL as Redis rate limiter
+    participant Org as Organization (instance AI config)
+    participant DSS as DatasourceStructureSolution
+    participant LLM as Claude / OpenAI / Azure / Local LLM
+
+    B->>UC: POST /users/ai-assistant/request
+    UC->>AAS: getAIResponse(provider, prompt, context, history)
+    AAS->>RL: per-user rate check (fails OPEN on Redis outage)
+    AAS->>Org: load aiAssistantConfig; refuse if disabled
+    AAS->>AAS: authorize edit:actions on context.entityId (hard 403, not a soft fallback)
+    AAS->>DSS: enrich prompt with datasource schema, budget-capped
+    AAS->>LLM: dispatch (180s timeout, HTTPS-only, no loopback)
+    LLM-->>AAS: generated code
+    AAS-->>B: {response, provider}
+```
+
+Notes:
+- **Not on the anonymous allow-list** and not tied to application/page permission checks the way viewing an app is — it's gated on **edit** rights to the specific entity being worked on, deliberately stricter than the read-only `execute:actions` a viewer holds.
+- **Configuration is instance-wide, not per-workspace** — one set of provider keys for the whole deployment, set once by an admin.
+- **Nothing about running a published application touches this path.** It's purely an authoring-time capability; losing it doesn't break any application, only the editing experience.
+
 ---
 
 ## What these flows tell you about the decomposition
@@ -522,6 +554,7 @@ Notes:
 | Git export needs the whole application tree *plus* datasource configs | Git Service is called *by* Application Service, which assembles the artifact first |
 | Fork/import remap ids across every entity type | An **orchestrated saga inside Application Service**, with one compensating call to Datasource Service |
 | Email is fire-and-forget and unobservable | Notifications becomes a **broker consumer with retry + DLQ** |
+| The AI Assistant calls a third-party LLM provider with unbounded latency and real per-request cost | Dispatch belongs in **Query Execution's `Workers.Ai` pool** — the same isolation this document already argues for the AI *connector* plugins, reused rather than duplicated (see [ADR-011](../03-execution/04-risks-and-adrs.md)) |
 
 ---
 

@@ -6,6 +6,8 @@
 
 > **On durations.** The phase ordering below is a *dependency* statement and is firm. Any week counts are illustrative placeholders for shaping conversations — real estimates come from the team after Phase A, when the actual velocity on this codebase is known. Do not treat them as commitments.
 
+> **On staffing multiple squads at once.** The phases below name the dependency order between whole services; they are not an instruction to hold a squad idle until an upstream phase finishes. Most cross-phase dependencies are a single contract, not a whole service — see [Parallel Delivery & Dependency Management](../04-delivery-tracking/03-parallel-delivery-and-dependencies.md) for exactly which features in each phase can start immediately against a mock.
+
 ---
 
 ## 1. Phase overview
@@ -55,7 +57,7 @@ gantt
 | `Appsmith.AppHost` | Aspire: Postgres, Redis, RabbitMQ + service wiring. `dotnet run` starts everything |
 | **Identity & Access Service** | Full: signup, login, OAuth/OIDC, password reset, email verification, workspaces, memberships, roles, grants. `identity_db` schema + migrations |
 | **Gateway walking skeleton** | YARP routing, cookie session + CSRF, session validation with Redis cache, internal-JWT minting, the `responseMeta` envelope, rate limiting. **No composition endpoints yet** |
-| CI/CD | Build, test, container images, migration job, architecture tests, `.proto` diff check |
+| CI/CD | Build, test, container images, migration job, architecture tests, OpenAPI diff check (`oasdiff`) |
 | Reference material | Connector golden-file capture harness; application DSL corpus exported from the Java system |
 
 **Exit criteria**
@@ -109,7 +111,7 @@ The largest service. Sub-sequence it:
 
 | Step | Content |
 |---|---|
-| C.1 | gRPC router, `execution_db` schema, `execution_audit`, config cache consuming `DatasourceConfigChanged` |
+| C.1 | REST router, `execution_db` schema, `execution_audit`, config cache consuming `DatasourceConfigChanged` |
 | C.2 | Worker process model: dispatch, CPU/memory/time limits, network policy, result-size caps |
 | C.3 | `IConnectorExecutor<T>` abstraction + the SQL worker pool (Postgres, MySQL, MSSQL) |
 | C.4 | HTTP worker pool (REST, GraphQL) |
@@ -197,7 +199,7 @@ A service is not done until **all** of these hold. Track it as a literal checkli
 - [ ] Architecture tests enforce the layer rules
 - [ ] Unit coverage: Domain ≥ 90%, Application ≥ 80%
 - [ ] Integration tests against real Postgres/Redis/RabbitMQ (Testcontainers)
-- [ ] `.proto` contracts published in `*.Contracts` and diff-checked in CI
+- [ ] OpenAPI document published at `/internal/v1/openapi.json` and diff-checked in CI (`oasdiff`)
 - [ ] Projection rebuild endpoint exists (if it holds a projection)
 - [ ] Its slice of the E2E suite is green against the new system
 - [ ] Runbook: what breaks, what the alerts mean, how to rebuild projections

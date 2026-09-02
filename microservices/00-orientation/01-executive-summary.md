@@ -85,7 +85,7 @@ Today's client relies on a Redis-backed session cookie plus CSRF token with `wit
 | **The DSL and evaluation engine are product, not plumbing** | The `{{ }}` binding evaluator, dependency graph and 82 widget property schemas *are* the product's differentiation | Treat the DSL JSON as a **frozen contract** across the rewrite. Port widget schemas mechanically; rewrite only the rendering shell |
 | **Eventual-consistency window on permission revocation** | A revoked user may keep access for the projection-lag duration | Gateway-level session kill for hard revocations; bounded lag SLO; audit on the event stream |
 | **Connector fidelity** | 25 connectors with years of accumulated edge-case behaviour (auth modes, pagination, type coercion) | Golden-file contract tests captured from the Java plugins *before* rewriting each connector. Port connectors in traffic-frequency order |
-| **New infrastructure the team hasn't run** | RabbitMQ, gRPC, and a message-outbox are all net-new — the current system has no broker at all | Phase A ships the shared `BuildingBlocks.Messaging` package and a working walking skeleton before any domain service depends on it |
+| **New infrastructure the team hasn't run** | RabbitMQ and a message-outbox are net-new — the current system has no broker at all | Phase A ships the shared `BuildingBlocks.Messaging` package and a working walking skeleton before any domain service depends on it |
 | **Losing behaviour nobody wrote down** | Migration logic in 83 Mongock changelogs and DSL version migrations encodes years of fixes | Behaviour capture via characterisation tests against the running Java system, not by reading code alone |
 
 ## 7. Shape of the plan

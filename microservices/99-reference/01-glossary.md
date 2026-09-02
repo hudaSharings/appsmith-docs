@@ -46,7 +46,7 @@ Appsmith's vocabulary, with the Java class it maps to and the target-side equiva
 | **Snapshot** | A coarse point-in-time backup of an application, taken before risky operations. **Not** a version history | `ApplicationSnapshot` | `application_snapshots` |
 | **Static URL** | A custom human-readable slug for a published application | `StaticUrlSettings` | `static_urls` table |
 | **Theme** | Styling applied to an application. System themes plus per-app customisations | `Theme` | `themes` table |
-| **Trigger** | A plugin call that populates a dynamic dropdown in the editor ("list the sheets in this spreadsheet") | `PluginExecutor.trigger` | Execution Service gRPC |
+| **Trigger** | A plugin call that populates a dynamic dropdown in the editor ("list the sheets in this spreadsheet") | `PluginExecutor.trigger` | Execution Service REST endpoint |
 | **Usage Pulse** | An anonymous activity beacon used to compute DAU/WAU/MAU | `UsagePulse` | `usage_events` |
 | **Widget** | A UI component on the canvas. 82 types | `src/widgets/<Name>` | Angular components + ported config |
 | **Workspace** | The tenancy and permission boundary. Contains applications and datasources | `Workspace` | `workspaces` table |

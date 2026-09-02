@@ -27,7 +27,7 @@ Mono-repo, matching the current repo's single-repo shape. One solution file per 
 │
 ├── services/
 │   ├── identity/
-│   │   ├── Appsmith.Identity.Api/              host, endpoints, gRPC
+│   │   ├── Appsmith.Identity.Api/              host, REST endpoints
 │   │   ├── Appsmith.Identity.Application/      use cases
 │   │   ├── Appsmith.Identity.Domain/           entities, value objects, domain events
 │   │   ├── Appsmith.Identity.Infrastructure/   EF Core, outbox, publishers
@@ -38,7 +38,7 @@ Mono-repo, matching the current repo's single-repo shape. One solution file per 
 │   ├── application/    (same five projects)
 │   ├── datasource/     (same five projects)
 │   ├── execution/
-│   │   ├── Appsmith.Execution.Api/             gRPC router
+│   │   ├── Appsmith.Execution.Api/             REST router
 │   │   ├── Appsmith.Execution.Workers.Sql/
 │   │   ├── Appsmith.Execution.Workers.NoSql/
 │   │   ├── Appsmith.Execution.Workers.Http/
@@ -171,25 +171,39 @@ Implement it once as an endpoint filter in `BuildingBlocks`, not per endpoint. S
 
 ---
 
-## 4. Internal communication — gRPC
+## 4. Internal communication — REST
 
-- **gRPC for all service-to-service sync calls.** Contract-first: `.proto` files live in each service's `Contracts` project and are the published interface.
-- **REST only at the gateway**, for the browser.
-- `Grpc.AspNetCore` server-side, `Grpc.Net.ClientFactory` client-side with **Polly resilience handlers** (`Microsoft.Extensions.Http.Resilience`): timeout, retry with jitter on idempotent calls only, circuit breaker.
-- **Deadlines on every call.** A call without a deadline is a bug.
-- Correlation id and user context propagate via gRPC metadata through a shared interceptor in `BuildingBlocks.Observability`.
+- **REST/JSON for every synchronous call in the system, edge and internal alike.** No second protocol stack: the same `HttpClient`/Minimal-API story the Gateway needs for the browser is reused for service-to-service calls, under an `/internal/v1/...` prefix each service exposes alongside its public `/api/v1/...` surface. Full endpoint-by-endpoint list: [Service Contracts & Events §2](05-service-contracts-and-events.md#2-synchronous-contracts-rest).
+- **Typed clients, generated, not hand-written.** Each service publishes an OpenAPI 3.1 document (`Microsoft.AspNetCore.OpenApi`) at `/internal/v1/openapi.json`; callers generate a typed C# client from it into their own `*.Contracts` project (`Microsoft.Extensions.ApiDescription.Client` / Kiota) at build time. This is what recovers protobuf's compile-time-checked request/response types without adopting protobuf.
+- **`IHttpClientFactory` + named typed clients**, one per downstream service, registered with **Polly resilience handlers** (`Microsoft.Extensions.Http.Resilience`): timeout, retry with jitter on idempotent (`GET`) calls only, circuit breaker.
+- **A timeout on every call, set explicitly.** REST has no built-in deadline propagation the way a gRPC call does — a call without an explicit `HttpClient.Timeout` (or a per-request `CancellationToken` from `CancellationTokenSource.CancelAfter`) is a bug.
+- **Correlation id and internal auth travel as ordinary HTTP headers** — `X-Correlation-Id` and `Authorization: Bearer <internal JWT>` — attached by a shared `DelegatingHandler` in `BuildingBlocks.Observability`/`BuildingBlocks.Auth`, not protocol-level metadata.
+- **Internal endpoints are network-isolated from the public surface**, not merely path-prefixed: the Gateway's YARP routing table only ever forwards `/api/v1/...`; `/internal/v1/...` is reachable service-to-service only, enforced by network policy. This is what keeps "REST for both edge and internal" from becoming "the internal API is accidentally public."
 
-```protobuf
-// Appsmith.Execution.Contracts/protos/execution.proto
-syntax = "proto3";
-package appsmith.execution.v1;
+**Why REST and not gRPC**, given gRPC's genuine advantages here (binary transport, native deadlines, protobuf-enforced contracts): see [ADR-012](../03-execution/04-risks-and-adrs.md) and [Service Contracts & Events §1](05-service-contracts-and-events.md#1-contract-rules). Short version — one HTTP stack instead of two, ordinary tooling for debugging internal calls, and a YARP gateway that can proxy pass-through CRUD without protocol translation; the lost compile-time contract safety is recovered via generated clients and CI-diffed OpenAPI documents instead of a schema compiler.
 
-service QueryExecution {
-  rpc ExecuteAction   (ExecuteActionRequest)   returns (ActionExecutionResult);
-  rpc TestConnection  (TestConnectionRequest)  returns (TestConnectionResult);
-  rpc GetStructure    (GetStructureRequest)    returns (DatasourceStructure);
-  rpc Trigger         (TriggerRequest)         returns (TriggerResult);
+```csharp
+// Appsmith.Application.Infrastructure — a typed client calling Query Execution
+public sealed class ExecutionApiClient(HttpClient http)
+{
+    public async Task<ActionExecutionResult> ExecuteActionAsync(
+        ExecuteActionRequest request, CancellationToken ct)
+    {
+        using var response = await http.PostAsJsonAsync("/internal/v1/execution/actions/execute", request, ct);
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<ActionExecutionResult>(ct))!;
+    }
 }
+
+// Program.cs
+services.AddHttpClient<ExecutionApiClient>(c =>
+    {
+        c.BaseAddress = new Uri(config["Services:Execution:BaseUrl"]!);
+        c.Timeout = TimeSpan.FromSeconds(30);
+    })
+    .AddHttpMessageHandler<InternalAuthHandler>()      // attaches the internal JWT
+    .AddHttpMessageHandler<CorrelationIdHandler>()
+    .AddStandardResilienceHandler();                    // Polly: retry, circuit breaker, timeout
 ```
 
 ---
@@ -287,7 +301,7 @@ Standardise on **OpenTelemetry**, which is already the standard in the Java syst
 
 ```csharp
 builder.Services.AddAppsmithObservability(builder.Configuration);   // BuildingBlocks.Observability
-// → OTLP exporter, ASP.NET Core + HttpClient + Npgsql + gRPC + MassTransit instrumentation,
+// → OTLP exporter, ASP.NET Core + HttpClient + Npgsql + MassTransit instrumentation,
 //   resource attributes (service.name/version/instance), correlation-id enrichment,
 //   Serilog structured logging to stdout, /health/live + /health/ready
 ```
@@ -353,7 +367,7 @@ This gives every developer a one-command environment with a dashboard showing di
 | **Unit** | xUnit v3, NSubstitute, Shouldly | Domain and Application layers. No database, no HTTP. Fast |
 | **Architecture** | NetArchTest | Enforces the layer rules in §1. Fails the build |
 | **Integration** | `WebApplicationFactory` + **Testcontainers** (Postgres, Redis, RabbitMQ) | Real database, real broker. One per service, covering endpoints → database |
-| **Contract** | `Grpc.Net.ClientFactory` against a test server + golden `.proto` snapshots | Detects breaking contract changes before consumers do |
+| **Contract** | `WebApplicationFactory` against each service's live OpenAPI document, diffed with `oasdiff` against the previous release | Detects breaking contract changes before consumers do |
 | **Connector golden files** | Recorded request/response pairs captured from the **Java plugins** | **Mandatory before rewriting any connector.** See [Plugin Engine §8](../01-current-system/06-plugin-execution-engine.md#8-the-target-design) |
 | **E2E** | Playwright, ported from the existing suite | The acceptance gate. The current Cypress/Playwright suites are behavioural specifications of the product — the most valuable asset for this rewrite |
 
@@ -369,7 +383,7 @@ Managed centrally in `Directory.Packages.props`.
 |---|---|
 | Data | `Microsoft.EntityFrameworkCore`, `Npgsql.EntityFrameworkCore.PostgreSQL`, `Dapper` |
 | Messaging | `MassTransit`, `MassTransit.RabbitMQ`, `MassTransit.EntityFrameworkCore` |
-| gRPC | `Grpc.AspNetCore`, `Grpc.Net.ClientFactory` |
+| REST clients | `Microsoft.Extensions.Http.Resilience`, `Microsoft.Extensions.ApiDescription.Client` (typed client codegen from OpenAPI) |
 | Gateway | `Yarp.ReverseProxy` |
 | Resilience | `Microsoft.Extensions.Http.Resilience`, `Polly` |
 | Caching | `Microsoft.Extensions.Caching.Hybrid`, `Microsoft.Extensions.Caching.StackExchangeRedis` |

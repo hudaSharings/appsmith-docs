@@ -99,7 +99,7 @@ This is direct precedent for the target's API Gateway/BFF composition layer. **D
 
 | Class | What it spans | Becomes |
 |---|---|---|
-| `ActionExecutionSolution` | NewAction + Datasource + DatasourceStorage + Plugin + connection pool | Application Service → **Query Execution Service** (sync gRPC) |
+| `ActionExecutionSolution` | NewAction + Datasource + DatasourceStorage + Plugin + connection pool | Application Service → **Query Execution Service** (sync REST) |
 | `ApplicationForkingService` | Application + Page + Action + ActionCollection + Theme + Datasource + CustomJSLib, into a target workspace | An **orchestrated saga** inside Application Service, with a compensating call to Datasource Service |
 | `ImportService` / `ExportService` | Serialise/deserialise an entire application tree as one JSON | Same shape as Fork — internal orchestration, not a service |
 | `PolicySolution` | Recomputes ACLs across Workspace → Application → Page → Action whenever a permission changes | **Event-driven authorization projections** ([Security & AuthZ](../02-target-architecture/06-security-and-authz.md)) |
@@ -121,6 +121,7 @@ This is direct precedent for the target's API Gateway/BFF composition layer. **D
 | Analytics | `services/ce/AnalyticsServiceCEImpl.java` → Segment SDK | Third-party async queue |
 | Scheduled jobs | Spring `@Scheduled` in-process, Redis `@DistributedLock` | No Quartz, no external scheduler, no queue |
 | File/image storage | `Asset` domain — raw `byte[]` **stored in MongoDB** | Not GridFS, not S3, not disk |
+| AI Assistant (editor copilot) | `services/ce/AIAssistantServiceCEImpl.java` (~1,000 lines) → Claude/OpenAI/Azure OpenAI/Local LLM | Instance-wide BYOK config, per-user rate limiting. Not to be confused with the AI *connector plugins* (below). See [AI Assistant](11-ai-assistant.md) |
 
 ## 7. What is notably absent
 
@@ -140,6 +141,7 @@ Naming these prevents wrong assumptions:
 3. [Permissions & ACL](04-permissions-and-acl.md) — the hardest constraint
 4. [Golden Paths](05-golden-paths.md) — how it all moves
 5. [Plugin & Execution Engine](06-plugin-execution-engine.md) — the riskiest subsystem
+6. [AI Assistant](11-ai-assistant.md) — the editor copilot, easy to miss, worth ~1,000 lines of Java on its own
 
 ---
 

@@ -134,7 +134,7 @@ Those five bullets are a textbook argument for a separate deployable, which is e
 ```mermaid
 flowchart LR
     APP["Application Service"] -->|"1. assemble ArtifactJson"| APP
-    APP -->|"2. gRPC GetDatasourceConfigs"| DSS[Datasource Service]
+    APP -->|"2. REST GetDatasourceConfigs"| DSS[Datasource Service]
     APP -->|"3. REST Commit(artifactJson, message)"| GIT
     subgraph GIT["Git Versioning Service"]
         API[API layer]

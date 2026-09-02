@@ -194,9 +194,20 @@ CREATE TABLE instances (               -- collapses Tenant + Organization into o
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     instance_name       text NOT NULL,
     configuration       jsonb NOT NULL DEFAULT '{}'::jsonb,  -- branding, enabled auth methods
+    -- AI Assistant (editor copilot) config — instance-wide, admin-only, matches today's
+    -- Organization.organizationConfiguration.aiAssistantConfig (Current System §"AI Assistant")
+    ai_assistant_enabled    boolean NOT NULL DEFAULT false,
+    ai_assistant_provider   smallint,             -- enum: Claude | OpenAI | AzureOpenAI | LocalLLM
+    ai_assistant_config     jsonb NOT NULL DEFAULT '{}'::jsonb,  -- non-secret fields: model, base URL, endpoint, deployment name
+    ai_assistant_secret_ref text,                 -- secrets-manager reference; NEVER ciphertext in this column
     created_at          timestamptz NOT NULL DEFAULT now(),
     updated_at          timestamptz NOT NULL DEFAULT now()
 );
+```
+
+**On the AI Assistant columns**: the current system's hand-rolled `enc:v1:` marker-and-encrypt scheme, its URL-rebinding protection (a stored key is invalidated if its destination URL changes without a fresh key in the same write), and its "masked key can't be redirected" guarantee all become properties of the `ISecretStore` abstraction itself, not fields or logic duplicated here — see [Security & AuthZ §4](06-security-and-authz.md#4-secrets) and [AI Assistant](../01-current-system/11-ai-assistant.md#2-configuration-instance-wide-admin-only-byok) for why that scheme is worth reading before assuming a generic secrets manager already covers it.
+
+```sql
 
 CREATE TABLE users (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -541,6 +552,18 @@ CREATE TABLE datasource_config_cache (
     PRIMARY KEY (datasource_id, environment_id)
 );
 
+-- Event-replicated cache of the AI Assistant's instance-wide provider config. NOT authoritative —
+-- Identity & Access's instances row is. Fed by AIAssistantConfigChanged.
+CREATE TABLE ai_provider_config_cache (
+    instance_id         uuid PRIMARY KEY,
+    provider            smallint NOT NULL,
+    configuration       jsonb NOT NULL,           -- model, base URL, endpoint, deployment name
+    secret_ref          text,
+    is_enabled          boolean NOT NULL DEFAULT false,
+    version             bigint NOT NULL,          -- event sequence, same staleness-detection pattern as datasource_config_cache
+    updated_at          timestamptz NOT NULL DEFAULT now()
+);
+
 -- NEW CAPABILITY — none of this is observable today
 CREATE TABLE execution_audit (
     id                  bigserial PRIMARY KEY,
@@ -549,7 +572,7 @@ CREATE TABLE execution_audit (
     application_id      uuid,
     action_id           uuid,
     datasource_id       uuid,
-    plugin_id           uuid NOT NULL,
+    plugin_id           uuid,                     -- NULL for AI Assistant calls (GenerateAssistantResponse) — no plugin/datasource involved
     worker_pool         text NOT NULL,
     view_mode           boolean NOT NULL,
     duration_ms         integer NOT NULL,

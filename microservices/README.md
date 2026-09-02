@@ -119,12 +119,4 @@ flowchart LR
     TODAY ==>|re-architecture| TARGET
 ```
 
----
-
-## Provenance & related documents
-
-- Earlier phase-1/phase-2 working notes live in [`../docs/architecture/`](../docs/architecture/) — `01-discovery.md` (ground-truth code map, cited by file:line) and `02-target.md` (first target-architecture pass). **This `microservices/` set supersedes them as the working reference**; it carries their findings forward, restates them for a .NET audience, and adds the service inventory, schema design, .NET conventions, endpoint catalog and roadmap they didn't cover. Where the two disagree, this set wins.
-- `docs/architecture/00-prior-hld-critique.md` reviews the original `Master AppSmith HLD .docx` (an 8-service Node.js proposal). Its conclusions are folded into [Service Inventory §"Reconciling the original HLD"](02-target-architecture/01-service-inventory.md#reconciling-the-original-hld).
-- Source of truth for all current-state claims is this repository at branch `release/01SEP2026`. Paths are repo-relative from the repo root.
-
 
